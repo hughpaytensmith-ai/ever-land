@@ -16,16 +16,18 @@ interface UIState {
   toggleReference: () => void
   toggleFlip: () => void
   togglePanel: () => void
+  setPanel: (v: boolean) => void
   setName: (n: string) => void
 }
 
 const initFlip = (() => {
   try {
-    // default ON (flipped) the first time — flips the east/west the user reported reversed
+    // Locked default: RETURN + DISH DROP on the LEFT (Hugh's preferred
+    // orientation). Per-user Flip toggle still overrides via localStorage.
     const v = localStorage.getItem('fbb:flipX')
-    return v === null ? true : v === '1'
+    return v === null ? false : v === '1'
   } catch {
-    return true
+    return false
   }
 })()
 
@@ -73,5 +75,8 @@ export const useUI = create<UIState>((set) => ({
       }
       return { showPanel }
     }),
+  // transient open (does NOT persist) — used to pop the panel on mobile when an
+  // item is tapped, so the default stays hidden on the next load
+  setPanel: (v) => set({ showPanel: v }),
   setName: (n) => set({ name: n }),
 }))

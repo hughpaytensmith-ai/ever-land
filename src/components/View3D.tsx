@@ -41,10 +41,12 @@ function Box({ item, bar, selected, onSelect }: { item: EquipItem; bar: BarShell
         castShadow
       >
         <boxGeometry args={[fp.w * S, item.h * S, fp.d * S]} />
+        {/* solid kit is OPAQUE — keeps it out of the transparency sort pass that
+            was flickering on orbit; only the faint fixtures stay see-through */}
         <meshStandardMaterial
           color={color}
-          transparent
-          opacity={item.fixture ? 0.4 : 0.92}
+          transparent={item.fixture}
+          opacity={item.fixture ? 0.4 : 1}
           emissive={selected ? PALETTE.ochre : '#000000'}
           emissiveIntensity={selected ? 0.5 : 0}
         />
@@ -61,19 +63,24 @@ function Box({ item, bar, selected, onSelect }: { item: EquipItem; bar: BarShell
 }
 
 function BarShellMesh({ bar }: { bar: BarShell }) {
-  const back = { len: bar.backLen, depth: bar.backDepth, h: 900 }
+  // The back run is longer than the front and starts WEST of x=0 (matches the
+  // plan + the back equipment). Previously the bench was drawn from x=0, so it
+  // overhung east and left the west kit uncovered — reading as a return on BOTH
+  // ends. Anchor it to the real back-run start instead.
+  const backX0 = bar.frontLen - bar.backLen
   const aisleZ = bar.frontDepth + bar.aisle
   return (
     <group>
       {/* front bar counter */}
       <mesh position={[(bar.frontLen / 2) * S, (bar.frontHeight / 2) * S, (bar.frontDepth / 2) * S]}>
         <boxGeometry args={[bar.frontLen * S, bar.frontHeight * S, bar.frontDepth * S]} />
-        <meshStandardMaterial color={PALETTE.walnut} transparent opacity={0.12} />
+        {/* depthWrite off so the translucent shell never z-fights the kit inside */}
+        <meshStandardMaterial color={PALETTE.walnut} transparent opacity={0.12} depthWrite={false} />
       </mesh>
-      {/* back bar bench */}
-      <mesh position={[(back.len / 2) * S, (back.h / 2) * S, (aisleZ + back.depth / 2) * S]}>
-        <boxGeometry args={[back.len * S, back.h * S, back.depth * S]} />
-        <meshStandardMaterial color={PALETTE.walnut} transparent opacity={0.1} />
+      {/* back bar bench — aligned to the back run (west start, like the plan) */}
+      <mesh position={[(backX0 + bar.backLen / 2) * S, (900 / 2) * S, (aisleZ + bar.backDepth / 2) * S]}>
+        <boxGeometry args={[bar.backLen * S, 900 * S, bar.backDepth * S]} />
+        <meshStandardMaterial color={PALETTE.walnut} transparent opacity={0.1} depthWrite={false} />
       </mesh>
     </group>
   )
@@ -85,10 +92,12 @@ export default function View3D() {
   const { selectedId, select } = useUI()
   const showOverhead = useUI((s) => s.showOverhead)
 
-  const worldW = bar.frontLen + bar.eastReturn
+  // The model spans from the back run's west start to the east return; recenter
+  // on the true mid-point so it sits on the origin (not skewed off to one side).
+  const minX = Math.min(0, bar.frontLen - bar.backLen)
+  const maxX = bar.frontLen + bar.eastReturn
   const worldD = totalDepth(bar)
-  // recenter the model on the origin
-  const offset: [number, number, number] = [(-worldW / 2) * S, 0, (-worldD / 2) * S]
+  const offset: [number, number, number] = [(-(minX + maxX) / 2) * S, 0, (-worldD / 2) * S]
 
   const visible = items.filter((i) => !i.hidden && !i.archived && (i.placement !== 'overhead' || showOverhead))
 

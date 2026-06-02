@@ -159,6 +159,22 @@ export function snapPlacement(
   return { x: Math.round(x), y: Math.round(y), snappedX, snappedY }
 }
 
+/** When an item is dragged across the aisle in the plan, re-home its placement
+ *  to the band its centre lands in (front-top↔back-bench, front-under↔back-under)
+ *  so it shows up in the right elevation + 3D immediately. Overhead + plant kit
+ *  is anchored elsewhere and never auto-rehomed. */
+export function placementForDrop(yData: number, fpd: number, current: Placement, bar: BarShell): Placement {
+  if (current === 'overhead' || current === 'plant') return current
+  const b = yBands(bar)
+  const centre = yData + fpd / 2
+  const aisleMid = (b.aisleStart + b.aisleEnd) / 2
+  const toBack = centre > aisleMid
+  const isFront = current === 'front-top' || current === 'front-under'
+  if (toBack && isFront) return current === 'front-under' ? 'back-under' : 'back-bench'
+  if (!toBack && !isFront) return current === 'back-under' ? 'front-under' : 'front-top'
+  return current
+}
+
 export type WarnLevel = 'info' | 'soft'
 export interface Warning {
   level: WarnLevel

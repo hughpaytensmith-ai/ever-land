@@ -21,6 +21,15 @@ export default function App() {
   const setName = useUI((s) => s.setName)
   const showPanel = useUI((s) => s.showPanel)
   const togglePanel = useUI((s) => s.togglePanel)
+  const selectedId = useUI((s) => s.selectedId)
+
+  // On phones, tapping an item pops the detail panel open (transient — the
+  // panel stays hidden by default on the next load).
+  useEffect(() => {
+    if (selectedId && typeof window !== 'undefined' && window.innerWidth < 768) {
+      useUI.getState().setPanel(true)
+    }
+  }, [selectedId])
   const [draftName, setDraftName] = useState('')
 
   // bootstrap sync + seed the §6 default layout

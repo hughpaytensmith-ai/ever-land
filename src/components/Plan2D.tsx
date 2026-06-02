@@ -4,7 +4,7 @@ import type Konva from 'konva'
 import { useItems, useBar, updateItem, setCursor, usePresence } from '../sync/store'
 import { useUI } from '../lib/ui'
 import { yBands, totalDepth, FRONT_ZONES } from '../config/bar'
-import { footprint, collisions, isOverhang, snapPlacement } from '../lib/geometry'
+import { footprint, collisions, isOverhang, snapPlacement, placementForDrop } from '../lib/geometry'
 import { PALETTE, STATUS_COLOR } from '../config/theme'
 import { planSnapshot } from '../lib/snapshot'
 import { itemIndexMap } from '../lib/indexing'
@@ -60,8 +60,13 @@ export default function Plan2D() {
     localX: number,
     localY: number,
   ) => {
-    const s = snapPlacement({ x: snap(toDataX(localX)), y: snap(localY / scale) }, item, items, bar)
-    return { sx: dataXToNode(s.x, fpw), sy: s.y * scale, dataX: s.x, dataY: s.y, snappedX: s.snappedX, snappedY: s.snappedY }
+    const yData = localY / scale
+    // re-home placement to the band being dragged into, and snap against THAT
+    // band's edges/neighbours (so a cross-aisle drag isn't pulled back)
+    const placement = placementForDrop(yData, footprint(item).d, item.placement, bar)
+    const target = placement === item.placement ? item : { ...item, placement }
+    const s = snapPlacement({ x: snap(toDataX(localX)), y: snap(yData) }, target, items, bar)
+    return { sx: dataXToNode(s.x, fpw), sy: s.y * scale, dataX: s.x, dataY: s.y, snappedX: s.snappedX, snappedY: s.snappedY, placement }
   }
 
   useLayoutEffect(() => {
@@ -220,7 +225,12 @@ export default function Plan2D() {
                   const r = snapNode(it, fpw, toDataX, node.x(), node.y())
                   setGuide({ x: null, y: null })
                   setReadout(null)
-                  updateItem(it.id, { x: r.dataX, y: r.dataY })
+                  updateItem(
+                    it.id,
+                    r.placement === it.placement
+                      ? { x: r.dataX, y: r.dataY }
+                      : { x: r.dataX, y: r.dataY, placement: r.placement },
+                  )
                 }}
               />
             )
