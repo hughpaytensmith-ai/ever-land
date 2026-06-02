@@ -77,9 +77,9 @@ function BarShellMesh({ bar }: { bar: BarShell }) {
         {/* depthWrite off so the translucent shell never z-fights the kit inside */}
         <meshStandardMaterial color={PALETTE.walnut} transparent opacity={0.12} depthWrite={false} />
       </mesh>
-      {/* back bar bench — aligned to the back run (west start, like the plan) */}
-      <mesh position={[(backX0 + bar.backLen / 2) * S, (900 / 2) * S, (aisleZ + bar.backDepth / 2) * S]}>
-        <boxGeometry args={[bar.backLen * S, 900 * S, bar.backDepth * S]} />
+      {/* back bar bench — 1000mm high, aligned to the back run (west start) */}
+      <mesh position={[(backX0 + bar.backLen / 2) * S, (1000 / 2) * S, (aisleZ + bar.backDepth / 2) * S]}>
+        <boxGeometry args={[bar.backLen * S, 1000 * S, bar.backDepth * S]} />
         <meshStandardMaterial color={PALETTE.walnut} transparent opacity={0.1} depthWrite={false} />
       </mesh>
     </group>

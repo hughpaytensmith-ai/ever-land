@@ -4,7 +4,7 @@ import type Konva from 'konva'
 import { useItems, useBar, updateItem, setCursor, usePresence } from '../sync/store'
 import { useUI } from '../lib/ui'
 import { yBands, totalDepth, FRONT_ZONES } from '../config/bar'
-import { footprint, collisions, isOverhang, snapPlacement, placementForDrop } from '../lib/geometry'
+import { footprint, collisions, isOverhang, snapPlacement, placementForDrop, isLocked } from '../lib/geometry'
 import { PALETTE, STATUS_COLOR } from '../config/theme'
 import { planSnapshot } from '../lib/snapshot'
 import { itemIndexMap } from '../lib/indexing'
@@ -145,6 +145,9 @@ export default function Plan2D() {
         onClick={(e) => {
           if (e.target === stageRef.current) select(null)
         }}
+        onTap={(e) => {
+          if (e.target === stageRef.current) select(null)
+        }}
       >
         <Layer>
           {/* ── BAR STRUCTURE (floor plan, SP185 A.07 — dish-drop/return WEST) ── */}
@@ -206,6 +209,7 @@ export default function Plan2D() {
                 n={idx.get(it.id) ?? 0}
                 scale={scale}
                 leftPx={leftPx}
+                locked={isLocked(it)}
                 selected={selectedId === it.id}
                 warned={warnedIds.has(it.id)}
                 onSelect={() => select(it.id)}
@@ -285,6 +289,7 @@ function PlanItem({
   n,
   scale,
   leftPx,
+  locked,
   selected,
   warned,
   onSelect,
@@ -296,6 +301,7 @@ function PlanItem({
   n: number
   scale: number
   leftPx: number
+  locked: boolean
   selected: boolean
   warned: boolean
   onSelect: () => void
@@ -315,16 +321,24 @@ function PlanItem({
     <Group
       x={leftPx}
       y={mm(item.y)}
-      draggable
+      draggable={!locked}
       dragBoundFunc={dragBoundFunc}
       onMouseDown={(e) => (e.cancelBubble = true)}
       onClick={(e) => {
         e.cancelBubble = true
         onSelect()
       }}
+      onTap={(e) => {
+        e.cancelBubble = true
+        onSelect()
+      }}
       onDblClick={(e) => {
         e.cancelBubble = true
-        updateItem(item.id, { rot: (item.rot + 90) % 360 })
+        if (!locked) updateItem(item.id, { rot: (item.rot + 90) % 360 })
+      }}
+      onDblTap={(e) => {
+        e.cancelBubble = true
+        if (!locked) updateItem(item.id, { rot: (item.rot + 90) % 360 })
       }}
       onDragStart={(e) => (e.cancelBubble = true)}
       onDragMove={(e) => onDragMove(e.target)}

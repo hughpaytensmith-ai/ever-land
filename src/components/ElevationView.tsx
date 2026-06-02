@@ -4,7 +4,7 @@ import type Konva from 'konva'
 import { useItems, useBar, updateItem } from '../sync/store'
 import { useUI } from '../lib/ui'
 import { totalDepth, yBands } from '../config/bar'
-import { footprint, baseHeight } from '../lib/geometry'
+import { footprint, baseHeight, isLocked } from '../lib/geometry'
 import { PALETTE, STATUS_COLOR } from '../config/theme'
 import type { BarShell, EquipItem } from '../types'
 
@@ -24,7 +24,12 @@ interface Cfg {
   // frontLen-backLen (it extends west of x=0), so South must offset by it —
   // otherwise back items render ~880mm off and partly off-canvas.
   origin: (b: BarShell) => number
-  include: (i: EquipItem) => boolean
+  // which side of the aisle this face shows (null = end section, shows all).
+  // Membership is decided by an item's POSITION, not its placement label, so a
+  // piece dragged across the bar lands on the right elevation immediately.
+  face: 'front' | 'back' | null
+  dimTicks: (b: BarShell) => number[] // interior dimension ticks (data coords)
+  dimLabel: (b: BarShell) => string
 }
 
 const CFG: Record<ElevDir, Cfg> = {
@@ -34,9 +39,9 @@ const CFG: Record<ElevDir, Cfg> = {
     axis: 'x', flip: false,
     runLen: (b) => b.frontLen,
     origin: () => 0,
-    // front face + overhead. North ∪ South must cover EVERY placement so no
-    // item ever goes missing vs the plan/3D.
-    include: (i) => i.placement === 'front-top' || i.placement === 'front-under' || i.placement === 'overhead',
+    face: 'front',
+    dimTicks: () => [1130, 3430], // Entertainment | Bar | Drinks-pass zone lines
+    dimLabel: (b) => `FRONT ${b.frontLen.toLocaleString()}`,
   },
   south: {
     title: 'South elevation',
@@ -44,8 +49,9 @@ const CFG: Record<ElevDir, Cfg> = {
     axis: 'x', flip: true,
     runLen: (b) => b.backLen,
     origin: (b) => b.frontLen - b.backLen, // back run starts west of x=0
-    // back runs + plant/gas (east return) + overhead
-    include: (i) => i.placement.startsWith('back') || i.placement === 'plant' || i.placement === 'overhead',
+    face: 'back',
+    dimTicks: () => [],
+    dimLabel: (b) => `BACK ${b.backLen.toLocaleString()}`,
   },
   west: {
     title: 'West elevation',
@@ -53,7 +59,9 @@ const CFG: Record<ElevDir, Cfg> = {
     axis: 'y', flip: false,
     runLen: (b) => totalDepth(b),
     origin: () => 0,
-    include: () => true, // end section shows the full cut — every item
+    face: null, // end section shows the full cut — every item
+    dimTicks: (b) => [b.frontDepth, b.frontDepth + b.aisle],
+    dimLabel: (b) => `DEPTH ${totalDepth(b).toLocaleString()}`,
   },
   east: {
     title: 'East elevation',
@@ -61,7 +69,9 @@ const CFG: Record<ElevDir, Cfg> = {
     axis: 'y', flip: true,
     runLen: (b) => totalDepth(b),
     origin: () => 0,
-    include: () => true,
+    face: null,
+    dimTicks: (b) => [b.frontDepth, b.frontDepth + b.aisle],
+    dimLabel: (b) => `DEPTH ${totalDepth(b).toLocaleString()}`,
   },
 }
 
@@ -107,6 +117,18 @@ export default function ElevationView({ dir }: { dir: ElevDir }) {
   const screenY = (z: number) => (MAX_H - z) * scale + padTop
 
   const bands = yBands(bar)
+  const aisleMid = (bands.aisleStart + bands.aisleEnd) / 2
+  // Which side of the aisle an item physically sits on (by position, so a stale
+  // placement label can't strand it on the wrong elevation).
+  const sideOf = (i: EquipItem) => (i.y + footprint(i).d / 2 > aisleMid ? 'back' : 'front')
+  const onFaceOf = (i: EquipItem) =>
+    cfg.face === null
+      ? true
+      : i.placement === 'overhead'
+        ? true
+        : i.placement === 'plant'
+          ? cfg.face === 'back'
+          : sideOf(i) === cfg.face
   // Show EVERY item in every elevation so each view mirrors the full layout
   // (plan = 3D = N/S/E/W). Items not on this face are drawn dimmed + inert.
   const shown = items.filter((i) => !i.hidden && !i.archived && (i.placement !== 'overhead' || showOverhead))
@@ -115,7 +137,7 @@ export default function ElevationView({ dir }: { dir: ElevDir }) {
   return (
     <div ref={wrapRef} className="relative h-full w-full overflow-hidden bg-paper">
       {sized && (
-        <Stage ref={stageRef} width={size.w} height={size.h} onMouseDown={(e) => { if (e.target === stageRef.current) select(null) }}>
+        <Stage ref={stageRef} width={size.w} height={size.h} onMouseDown={(e) => { if (e.target === stageRef.current) select(null) }} onTap={(e) => { if (e.target === stageRef.current) select(null) }}>
           <Layer>
             {/* depth-section bands (end elevations) */}
             {cfg.axis === 'y' && (
@@ -127,15 +149,20 @@ export default function ElevationView({ dir }: { dir: ElevDir }) {
 
             {/* floor */}
             <Line points={[padX, screenY(0), size.w - padX, screenY(0)]} stroke={PALETTE.ink} strokeWidth={2} />
-            {/* 1100 datum (front-bar counter height) */}
+            {/* height datums (labels staggered so the close lines stay legible) */}
             <Line points={[padX, screenY(1100), size.w - padX, screenY(1100)]} stroke={PALETTE.stone} strokeWidth={1} dash={[8, 6]} />
-            <Text x={padX + 4} y={screenY(1100) - 16} text="1100" fontSize={11} fill={PALETTE.stone} />
-            {/* 900 datum (back-bench / standing working height) */}
+            <Text x={padX + 4} y={screenY(1100) - 14} text="1100 front" fontSize={11} fill={PALETTE.stone} />
+            <Line points={[padX, screenY(1000), size.w - padX, screenY(1000)]} stroke={PALETTE.pine} strokeWidth={1} dash={[8, 6]} />
+            <Text x={padX + 96} y={screenY(1000) - 14} text="1000 back bench" fontSize={11} fill={PALETTE.pine} />
             <Line points={[padX, screenY(900), size.w - padX, screenY(900)]} stroke={PALETTE.ochre} strokeWidth={1} dash={[8, 6]} />
-            <Text x={padX + 4} y={screenY(900) - 16} text="900" fontSize={11} fill={PALETTE.ochre} />
+            <Text x={padX + 232} y={screenY(900) - 14} text="900" fontSize={11} fill={PALETTE.ochre} />
+
+            {/* dimension chain (run length + zone ticks) below the floor */}
+            <ElevDim screenX={screenX} origin={origin} runLen={runLen} ticks={cfg.dimTicks(bar)} label={cfg.dimLabel(bar)} y={screenY(0) + 24} />
 
             {shown.map((i) => {
-              const onFace = cfg.include(i)
+              const onFace = onFaceOf(i)
+              const draggable = onFace && !isLocked(i)
               const a = along(i)
               const by = baseHeight(i, bar)
               const x = cfg.flip ? screenX(a.p + a.len) : screenX(a.p)
@@ -157,11 +184,15 @@ export default function ElevationView({ dir }: { dir: ElevDir }) {
                   key={i.id}
                   x={x}
                   y={y}
-                  draggable={onFace}
+                  draggable={draggable}
                   listening={onFace}
                   opacity={onFace ? 1 : 0.16}
                   onMouseDown={(e) => (e.cancelBubble = true)}
                   onClick={(e) => {
+                    e.cancelBubble = true
+                    select(i.id)
+                  }}
+                  onTap={(e) => {
                     e.cancelBubble = true
                     select(i.id)
                   }}
@@ -207,6 +238,38 @@ export default function ElevationView({ dir }: { dir: ElevDir }) {
         {readout ?? 'drag to reposition along the wall · click to select'}
       </div>
     </div>
+  )
+}
+
+// Dimension chain below the floor — run length + interior ticks, like the plan.
+function ElevDim({
+  screenX,
+  origin,
+  runLen,
+  ticks,
+  label,
+  y,
+}: {
+  screenX: (mm: number) => number
+  origin: number
+  runLen: number
+  ticks: number[]
+  label: string
+  y: number
+}) {
+  const a = screenX(origin)
+  const b = screenX(origin + runLen)
+  const left = Math.min(a, b)
+  const right = Math.max(a, b)
+  const allTicks = [origin, origin + runLen, ...ticks]
+  return (
+    <Group listening={false}>
+      <Line points={[left, y, right, y]} stroke={PALETTE.stone} strokeWidth={0.75} />
+      {allTicks.map((t, i) => (
+        <Line key={i} points={[screenX(t), y - 4, screenX(t), y + 4]} stroke={PALETTE.stone} strokeWidth={0.75} />
+      ))}
+      <Text x={left} y={y + 5} width={right - left} align="center" text={label} fontSize={10} fill={PALETTE.stone} />
+    </Group>
   )
 }
 

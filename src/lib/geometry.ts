@@ -159,6 +159,12 @@ export function snapPlacement(
   return { x: Math.round(x), y: Math.round(y), snappedX, snappedY }
 }
 
+/** Fixed joinery that must not be dragged: the 3 back shelves + the overhead
+ *  soffit. Still selectable (to read its spec), just not movable. */
+export function isLocked(item: EquipItem): boolean {
+  return item.key === 'shelf' || item.placement === 'overhead'
+}
+
 /** When an item is dragged across the aisle in the plan, re-home its placement
  *  to the band its centre lands in (front-top↔back-bench, front-under↔back-under)
  *  so it shows up in the right elevation + 3D immediately. Overhead + plant kit

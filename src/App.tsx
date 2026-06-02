@@ -23,12 +23,10 @@ export default function App() {
   const togglePanel = useUI((s) => s.togglePanel)
   const selectedId = useUI((s) => s.selectedId)
 
-  // On phones, tapping an item pops the detail panel open (transient — the
-  // panel stays hidden by default on the next load).
+  // Selecting an item opens the detail panel (desktop + mobile) so its spec is
+  // visible. Transient — the panel still defaults to hidden on the next load.
   useEffect(() => {
-    if (selectedId && typeof window !== 'undefined' && window.innerWidth < 768) {
-      useUI.getState().setPanel(true)
-    }
+    if (selectedId) useUI.getState().setPanel(true)
   }, [selectedId])
   const [draftName, setDraftName] = useState('')
 
