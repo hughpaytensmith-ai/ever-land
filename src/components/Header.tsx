@@ -11,7 +11,7 @@ export default function Header({ connected }: { connected: boolean }) {
   const presence = usePresence()
   const versions = useVersionNames()
   const { canUndo, canRedo } = useUndoState()
-  const { view, setView, showOverhead, toggleOverhead, showReference, toggleReference, flipX, toggleFlip, name } = useUI()
+  const { view, setView, showOverhead, toggleOverhead, showReference, toggleReference, flipX, toggleFlip, showPanel, togglePanel, name } = useUI()
   const [copied, setCopied] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const mode = sync().mode
@@ -30,7 +30,7 @@ export default function Header({ connected }: { connected: boolean }) {
   const myColor = presence.length >= 0 ? '#35705E' : '#35705E'
 
   return (
-    <header className="flex items-center gap-3 border-b border-stone/30 bg-paper px-4 py-2.5">
+    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-stone/30 bg-paper px-4 py-2.5">
       <div className="flex items-baseline gap-2">
         <span className="wordmark text-[20px] font-semibold text-pine">Fletcher's</span>
         <span className="text-[12px] text-stone">— Bar Builder</span>
@@ -98,6 +98,17 @@ export default function Header({ connected }: { connected: boolean }) {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        {/* hide / show the right details panel */}
+        <button
+          onClick={togglePanel}
+          className={`rounded-md border px-2.5 py-1 text-[12px] ${
+            showPanel ? 'border-pine bg-pine/10 text-pine' : 'border-stone/30 text-stone'
+          }`}
+          title={showPanel ? 'Hide the details panel' : 'Show the details panel'}
+        >
+          Details
+        </button>
+
         {/* presence */}
         <div className="flex items-center -space-x-1.5">
           <Avatar name={name ?? 'You'} color={myColor} ring />

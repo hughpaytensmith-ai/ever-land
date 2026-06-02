@@ -8,12 +8,14 @@ interface UIState {
   showOverhead: boolean
   showReference: boolean
   flipX: boolean
+  showPanel: boolean
   name: string | null
   select: (id: string | null) => void
   setView: (v: ViewMode) => void
   toggleOverhead: () => void
   toggleReference: () => void
   toggleFlip: () => void
+  togglePanel: () => void
   setName: (n: string) => void
 }
 
@@ -27,12 +29,25 @@ const initFlip = (() => {
   }
 })()
 
+// Right detail panel: remembered preference, else shown on desktop / hidden on
+// phones (where the canvas needs the full width).
+const initPanel = (() => {
+  try {
+    const v = localStorage.getItem('fbb:showPanel')
+    if (v !== null) return v === '1'
+  } catch {
+    /* ignore */
+  }
+  return typeof window !== 'undefined' ? window.innerWidth >= 768 : true
+})()
+
 export const useUI = create<UIState>((set) => ({
   selectedId: null,
   view: '2d',
   showOverhead: true,
   showReference: false,
   flipX: initFlip,
+  showPanel: initPanel,
   name: null,
   select: (id) => set({ selectedId: id }),
   setView: (v) => set({ view: v }),
@@ -47,6 +62,16 @@ export const useUI = create<UIState>((set) => ({
         /* ignore */
       }
       return { flipX }
+    }),
+  togglePanel: () =>
+    set((s) => {
+      const showPanel = !s.showPanel
+      try {
+        localStorage.setItem('fbb:showPanel', showPanel ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+      return { showPanel }
     }),
   setName: (n) => set({ name: n }),
 }))

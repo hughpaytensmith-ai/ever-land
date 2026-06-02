@@ -20,6 +20,10 @@ interface Cfg {
   axis: 'x' | 'y'
   flip: boolean
   runLen: (b: BarShell) => number
+  // data coord at the run's start (west/customer). The back run is based at
+  // frontLen-backLen (it extends west of x=0), so South must offset by it —
+  // otherwise back items render ~880mm off and partly off-canvas.
+  origin: (b: BarShell) => number
   include: (i: EquipItem) => boolean
 }
 
@@ -29,6 +33,7 @@ const CFG: Record<ElevDir, Cfg> = {
     sub: 'front bar — customer face (looking south)',
     axis: 'x', flip: false,
     runLen: (b) => b.frontLen,
+    origin: () => 0,
     // front face + overhead. North ∪ South must cover EVERY placement so no
     // item ever goes missing vs the plan/3D.
     include: (i) => i.placement === 'front-top' || i.placement === 'front-under' || i.placement === 'overhead',
@@ -38,6 +43,7 @@ const CFG: Record<ElevDir, Cfg> = {
     sub: 'back-of-bar — engine wall (looking north)',
     axis: 'x', flip: true,
     runLen: (b) => b.backLen,
+    origin: (b) => b.frontLen - b.backLen, // back run starts west of x=0
     // back runs + plant/gas (east return) + overhead
     include: (i) => i.placement.startsWith('back') || i.placement === 'plant' || i.placement === 'overhead',
   },
@@ -46,6 +52,7 @@ const CFG: Record<ElevDir, Cfg> = {
     sub: 'Entertainment end — section by depth (looking east)',
     axis: 'y', flip: false,
     runLen: (b) => totalDepth(b),
+    origin: () => 0,
     include: () => true, // end section shows the full cut — every item
   },
   east: {
@@ -53,6 +60,7 @@ const CFG: Record<ElevDir, Cfg> = {
     sub: 'dish-drop end — section by depth (looking west)',
     axis: 'y', flip: true,
     runLen: (b) => totalDepth(b),
+    origin: () => 0,
     include: () => true,
   },
 }
@@ -84,6 +92,7 @@ export default function ElevationView({ dir }: { dir: ElevDir }) {
   }, [])
 
   const runLen = cfg.runLen(bar)
+  const origin = cfg.origin(bar)
   const padX = 60
   const padTop = 40
   const padBottom = 60
@@ -94,7 +103,7 @@ export default function ElevationView({ dir }: { dir: ElevDir }) {
     const fp = footprint(i)
     return cfg.axis === 'x' ? { p: i.x, len: fp.w } : { p: i.y, len: fp.d }
   }
-  const screenX = (mm: number) => (cfg.flip ? runLen - mm : mm) * scale + padX
+  const screenX = (mm: number) => (cfg.flip ? runLen - (mm - origin) : mm - origin) * scale + padX
   const screenY = (z: number) => (MAX_H - z) * scale + padTop
 
   const bands = yBands(bar)
@@ -137,7 +146,8 @@ export default function ElevationView({ dir }: { dir: ElevDir }) {
               // convert a node's screen pos → along-axis mm + base-height mm
               const toMm = (px: number, py: number) => {
                 let along = (px - padX) / scale
-                if (cfg.flip) along = runLen - along - a.len
+                if (cfg.flip) along = runLen - along - a.len + origin
+                else along = along + origin
                 const topZ = MAX_H - (py - padTop) / scale
                 const baseZ = Math.max(0, topZ - i.h)
                 return { along: snap(along), z: snap(baseZ) }

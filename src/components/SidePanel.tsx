@@ -15,6 +15,7 @@ type Tab = 'schedule' | 'shell'
 export default function SidePanel() {
   const items = useItems()
   const { selectedId, select } = useUI()
+  const togglePanel = useUI((s) => s.togglePanel)
   const [tab, setTab] = useState<Tab>('schedule')
   const selected = items.find((i) => i.id === selectedId) ?? null
 
@@ -40,7 +41,17 @@ export default function SidePanel() {
   }
 
   return (
-    <aside className="flex h-full w-[380px] shrink-0 flex-col border-l border-stone/30 bg-paper">
+    <aside className="z-40 flex h-full w-[380px] max-w-[88vw] shrink-0 flex-col border-l border-stone/30 bg-paper max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:shadow-panel">
+      <div className="flex items-center justify-between border-b border-stone/20 px-4 py-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-stone">Details</span>
+        <button
+          onClick={togglePanel}
+          title="Hide panel"
+          className="rounded px-2 py-0.5 text-[13px] leading-none text-stone hover:bg-white hover:text-ink"
+        >
+          ✕
+        </button>
+      </div>
       <div className="space-y-3 overflow-y-auto px-4 py-4">
         <Warnings />
         {selected && <SpecCard item={selected} />}

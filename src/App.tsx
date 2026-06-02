@@ -19,6 +19,8 @@ export default function App() {
   const view = useUI((s) => s.view)
   const name = useUI((s) => s.name)
   const setName = useUI((s) => s.setName)
+  const showPanel = useUI((s) => s.showPanel)
+  const togglePanel = useUI((s) => s.togglePanel)
   const [draftName, setDraftName] = useState('')
 
   // bootstrap sync + seed the §6 default layout
@@ -112,7 +114,7 @@ export default function App() {
   return (
     <div className="flex h-full flex-col bg-paper text-ink">
       <Header connected={connected} />
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         <ReferenceDrawer />
         <main className="min-w-0 flex-1">
           {/* Each view is isolated: a 3D/WebGL failure shows a small fallback in
@@ -131,7 +133,13 @@ export default function App() {
             </ErrorBoundary>
           )}
         </main>
-        <SidePanel />
+        {showPanel && (
+          <>
+            {/* dim backdrop behind the drawer on phones */}
+            <div className="fixed inset-0 z-30 bg-ink/30 md:hidden" onClick={togglePanel} aria-hidden />
+            <SidePanel />
+          </>
+        )}
       </div>
 
       {!name && (
