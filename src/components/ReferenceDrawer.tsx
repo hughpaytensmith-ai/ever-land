@@ -1,21 +1,26 @@
 import { useUI } from '../lib/ui'
 
+// Prefix public assets with the app's base path so they resolve under a
+// sub-path deploy (e.g. GitHub Pages /fletchers-bar-builder/) as well as root.
+const asset = (p: string) => import.meta.env.BASE_URL + p
+const PDF_HREF = asset('assets/SP185_DD01.pdf')
+
 // Full Studio Plenty SP185_DD01 set, rendered from the PDF (13 sheets) — so the
 // whole floorplan / elevations / perspectives are on hand for reference.
 const SHEETS: { src: string; label: string; primary?: boolean }[] = [
-  { src: '/assets/plans/sheet-01.png', label: 'Cover' },
-  { src: '/assets/plans/sheet-02.png', label: 'Ground floor — GA plan (1:50)' },
-  { src: '/assets/plans/sheet-03.png', label: 'Reflected ceiling plan (RCP)' },
-  { src: '/assets/plans/sheet-04.png', label: 'Sheet 4' },
-  { src: '/assets/plans/sheet-05.png', label: 'Interior elevations (A.05)' },
-  { src: '/assets/plans/sheet-06.png', label: 'Interior elevations (A.06)' },
-  { src: '/assets/plans/sheet-07.png', label: 'A.07 — Bar & kitchen plan (primary)', primary: true },
-  { src: '/assets/plans/sheet-08.png', label: 'Sheet 8' },
-  { src: '/assets/plans/sheet-09.png', label: 'Sheet 9' },
-  { src: '/assets/plans/sheet-10.png', label: 'Sheet 10' },
-  { src: '/assets/plans/sheet-11.png', label: 'Concept perspectives (A.11)' },
-  { src: '/assets/plans/sheet-12.png', label: 'Sheet 12' },
-  { src: '/assets/plans/sheet-13.png', label: 'Sheet 13' },
+  { src: asset('assets/plans/sheet-01.png'), label: 'Cover' },
+  { src: asset('assets/plans/sheet-02.png'), label: 'Ground floor — GA plan (1:50)' },
+  { src: asset('assets/plans/sheet-03.png'), label: 'Reflected ceiling plan (RCP)' },
+  { src: asset('assets/plans/sheet-04.png'), label: 'Sheet 4' },
+  { src: asset('assets/plans/sheet-05.png'), label: 'Interior elevations (A.05)' },
+  { src: asset('assets/plans/sheet-06.png'), label: 'Interior elevations (A.06)' },
+  { src: asset('assets/plans/sheet-07.png'), label: 'A.07 — Bar & kitchen plan (primary)', primary: true },
+  { src: asset('assets/plans/sheet-08.png'), label: 'Sheet 8' },
+  { src: asset('assets/plans/sheet-09.png'), label: 'Sheet 9' },
+  { src: asset('assets/plans/sheet-10.png'), label: 'Sheet 10' },
+  { src: asset('assets/plans/sheet-11.png'), label: 'Concept perspectives (A.11)' },
+  { src: asset('assets/plans/sheet-12.png'), label: 'Sheet 12' },
+  { src: asset('assets/plans/sheet-13.png'), label: 'Sheet 13' },
 ]
 
 export default function ReferenceDrawer() {
@@ -30,7 +35,7 @@ export default function ReferenceDrawer() {
       <div className="space-y-3 overflow-y-auto px-3 py-3">
         <p className="text-[11px] leading-snug text-stone">
           Studio Plenty SP185_DD01 (rev 27/5/2026, WIP — not for construction). Click a sheet to open it full-size.{' '}
-          <a href="/assets/SP185_DD01.pdf" target="_blank" rel="noreferrer" className="text-pine underline">Open full PDF ↗</a>
+          <a href={PDF_HREF} target="_blank" rel="noreferrer" className="text-pine underline">Open full PDF ↗</a>
         </p>
         {SHEETS.map((s) => (
           <a key={s.src} href={s.src} target="_blank" rel="noreferrer"
