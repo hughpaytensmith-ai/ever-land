@@ -1,0 +1,19 @@
+# y-websocket server for the Fletcher's Bar Builder live link.
+# Drop this on the Hetzner box (alongside n8n) and run `docker compose up -d`.
+# Then point the frontend at it:  VITE_SYNC_WS_URL=wss://bar-sync.yourdomain.com
+#
+# Behind a reverse proxy (Caddy/Traefik/nginx) terminate TLS and proxy the
+# WebSocket upgrade to port 1234. For a quick local test, ws://SERVER_IP:1234.
+
+services:
+  bar-sync:
+    image: node:20-alpine
+    container_name: fletchers-bar-sync
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -c "npm i -g y-websocket@^2 && HOST=0.0.0.0 PORT=1234 npx y-websocket"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=1234
+    ports:
+      - '1234:1234'
