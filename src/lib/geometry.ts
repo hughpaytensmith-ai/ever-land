@@ -73,7 +73,11 @@ export function regionFor(placement: Placement, bar: BarShell): Rect {
     case 'back-under':
     case 'back-bench':
     case 'back-wall':
-      return { x: 0, y: b.backStart, w: bar.backLen, d: bar.backDepth }
+      // The back run is LONGER than the front and extends west of x=0 to the
+      // dish drop, so its west edge sits at frontLen−backLen (negative), not 0.
+      // This must match the back-counter Rect drawn in Plan2D, or snap targets
+      // + overhang checks land on the wrong edges.
+      return { x: bar.frontLen - bar.backLen, y: b.backStart, w: bar.backLen, d: bar.backDepth }
     case 'plant':
       return { x: bar.frontLen, y: 0, w: bar.eastReturn, d: totalDepth(bar) }
   }
@@ -94,12 +98,12 @@ export function packedLength(items: EquipItem[], placement: Placement): number {
 }
 
 // ── Snap-to ──────────────────────────────────────────────────────────────
-// Default 20mm gap between equipment (more if a card's notes flag ventilation).
-export const EQUIP_GAP = 20
+// Default 30mm gap between adjacent equipment (service/ventilation clearance).
+export const EQUIP_GAP = 30
 const SNAP_THRESH = 70 // mm proximity that triggers a snap
 
 /** Refine a proposed drag position: snap the dragged item's edges to bar/bench
- *  edges, the front-bar zone lines, and neighbouring items (leaving a 20mm gap
+ *  edges, the front-bar zone lines, and neighbouring items (leaving a 30mm gap
  *  or flush-aligning). Returns the snapped position + which guides fired. */
 export function snapPlacement(
   proposed: { x: number; y: number },
@@ -127,8 +131,8 @@ export function snapPlacement(
   }
   for (const o of neighbours) {
     const of = footprint(o)
-    leftTargets.push(of.x + of.w + EQUIP_GAP) // 20mm gap to o's right
-    leftTargets.push(of.x - EQUIP_GAP - fp.w) // 20mm gap to o's left
+    leftTargets.push(of.x + of.w + EQUIP_GAP) // 30mm gap to o's right
+    leftTargets.push(of.x - EQUIP_GAP - fp.w) // 30mm gap to o's left
     leftTargets.push(of.x) // align left edges
     leftTargets.push(of.x + of.w - fp.w) // align right edges
   }

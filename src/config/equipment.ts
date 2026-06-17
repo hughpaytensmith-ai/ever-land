@@ -155,17 +155,17 @@ const SEEDS: Seed[] = [
   // 3× back-bar open shelves (per A.05 East elevation — guessed spacing)
   {
     id: 'shelf-1', key: 'shelf', label: 'Back shelf 1 (low)',
-    product: 'Open display shelf', w: 3730, d: 120, h: 30, x: 0, y: 1990, z: 1200,
+    product: 'Open display shelf', w: 4610, d: 120, h: 30, x: -880, y: 1980, z:1200,
     placement: 'back-wall', zone: 'Back wall', cat: 'fixture', status: 'confirmed', services: {}, fixture: true,
   },
   {
     id: 'shelf-2', key: 'shelf', label: 'Back shelf 2 (mid)',
-    product: 'Open display shelf', w: 3730, d: 120, h: 30, x: 0, y: 1990, z: 1585,
+    product: 'Open display shelf', w: 4610, d: 120, h: 30, x: -880, y: 1980, z:1585,
     placement: 'back-wall', zone: 'Back wall', cat: 'fixture', status: 'confirmed', services: {}, fixture: true,
   },
   {
     id: 'shelf-3', key: 'shelf', label: 'Back shelf 3 (high)',
-    product: 'Open display shelf', w: 3730, d: 120, h: 30, x: 0, y: 1990, z: 1970,
+    product: 'Open display shelf', w: 4610, d: 120, h: 30, x: -880, y: 1980, z:1970,
     placement: 'back-wall', zone: 'Back wall', cat: 'fixture', status: 'confirmed', services: {}, fixture: true,
   },
   {

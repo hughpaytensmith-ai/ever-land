@@ -215,7 +215,7 @@ export default function Plan2D() {
                 onSelect={() => select(it.id)}
                 // live magnetic snap: constrain the drag to snapped positions
                 // (abs↔local via pan) so the item visibly clicks to run edges,
-                // the 1130/3430 zone lines, bench edges + neighbours (20mm gap).
+                // the 1130/3430 zone lines, bench edges + neighbours (30mm gap).
                 dragBoundFunc={(pos) => {
                   const r = snapNode(it, fpw, toDataX, pos.x - pan.x, pos.y - pan.y)
                   return { x: r.sx + pan.x, y: r.sy + pan.y }
