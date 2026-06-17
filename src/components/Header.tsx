@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useItems, useBar, usePresence, useVersionNames, saveVersion, restoreVersion, undo, redo, useUndoState } from '../sync/store'
+import { useItems, useBar, usePresence, useVersionNames, saveVersion, restoreVersion, undo, redo, useUndoState, useSaveStatus } from '../sync/store'
 import { sync } from '../sync/store'
 import { useUI, type ViewMode } from '../lib/ui'
 import { toCSV, downloadText, downloadDataUrl, buildSchedulePdf } from '../lib/export'
@@ -11,7 +11,8 @@ export default function Header({ connected }: { connected: boolean }) {
   const presence = usePresence()
   const versions = useVersionNames()
   const { canUndo, canRedo } = useUndoState()
-  const { view, setView, showOverhead, toggleOverhead, showReference, toggleReference, flipX, toggleFlip, showPanel, togglePanel, name } = useUI()
+  const saveStatus = useSaveStatus()
+  const { view, setView, showOverhead, toggleOverhead, showReference, toggleReference, flipX, toggleFlip, showPanel, togglePanel, toggleHistory, name } = useUI()
   const [copied, setCopied] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const mode = sync().mode
@@ -32,7 +33,7 @@ export default function Header({ connected }: { connected: boolean }) {
   return (
     <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-stone/30 bg-paper px-4 py-2.5">
       <div className="flex items-baseline gap-2">
-        <span className="wordmark text-[20px] font-semibold text-pine">Fletcher's</span>
+        <span className="wordmark text-[20px] font-semibold text-pine">Ever Land</span>
         <span className="text-[12px] text-stone">— Bar Builder</span>
       </div>
 
@@ -109,6 +110,25 @@ export default function Header({ connected }: { connected: boolean }) {
           Details
         </button>
 
+        {/* edit history (who / when) */}
+        <button
+          onClick={toggleHistory}
+          className="rounded-md border border-stone/30 px-2.5 py-1 text-[12px] text-stone hover:bg-white hover:text-ink"
+          title="Edit history — who changed what, and when"
+        >
+          History
+        </button>
+
+        {/* autosave status */}
+        {isCloud && saveStatus !== 'idle' && (
+          <span
+            className={`text-[11px] ${saveStatus === 'error' ? 'text-terracotta' : saveStatus === 'saving' ? 'text-stone' : 'text-pine'}`}
+            title="Changes save automatically to everyone"
+          >
+            {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? 'Save failed – retrying' : 'Saved ✓'}
+          </span>
+        )}
+
         {/* presence */}
         <div className="flex items-center -space-x-1.5">
           <Avatar name={name ?? 'You'} color={myColor} ring />
@@ -155,10 +175,10 @@ export default function Header({ connected }: { connected: boolean }) {
               className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-md border border-stone/30 bg-white text-[12px] shadow-panel"
               onMouseLeave={() => setExportOpen(false)}
             >
-              <ExportItem label="Equipment schedule (CSV)" onClick={() => { downloadText('fletchers-bar-schedule.csv', toCSV(items, bar)); setExportOpen(false) }} />
+              <ExportItem label="Equipment schedule (CSV)" onClick={() => { downloadText('ever-land-schedule.csv', toCSV(items, bar)); setExportOpen(false) }} />
               <ExportItem label="Full schedule + plans (PDF)" onClick={() => { buildSchedulePdf(items, bar, planSnapshot.get?.(), threeSnapshot.get?.()); setExportOpen(false) }} />
-              <ExportItem label="2D plan (PNG)" onClick={() => { const d = planSnapshot.get?.(); if (d) downloadDataUrl('fletchers-bar-plan.png', d); setExportOpen(false) }} />
-              <ExportItem label="3D snapshot (PNG)" onClick={() => { const d = threeSnapshot.get?.(); if (d) downloadDataUrl('fletchers-bar-3d.png', d); setExportOpen(false) }} />
+              <ExportItem label="2D plan (PNG)" onClick={() => { const d = planSnapshot.get?.(); if (d) downloadDataUrl('ever-land-plan.png', d); setExportOpen(false) }} />
+              <ExportItem label="3D snapshot (PNG)" onClick={() => { const d = threeSnapshot.get?.(); if (d) downloadDataUrl('ever-land-3d.png', d); setExportOpen(false) }} />
             </div>
           )}
         </div>

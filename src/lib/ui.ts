@@ -9,6 +9,7 @@ interface UIState {
   showReference: boolean
   flipX: boolean
   showPanel: boolean
+  showHistory: boolean
   name: string | null
   select: (id: string | null) => void
   setView: (v: ViewMode) => void
@@ -17,6 +18,7 @@ interface UIState {
   toggleFlip: () => void
   togglePanel: () => void
   setPanel: (v: boolean) => void
+  toggleHistory: () => void
   setName: (n: string) => void
 }
 
@@ -50,6 +52,7 @@ export const useUI = create<UIState>((set) => ({
   showReference: false,
   flipX: initFlip,
   showPanel: initPanel,
+  showHistory: false,
   name: null,
   select: (id) => set({ selectedId: id }),
   setView: (v) => set({ view: v }),
@@ -78,5 +81,6 @@ export const useUI = create<UIState>((set) => ({
   // transient open (does NOT persist) — used to pop the panel on mobile when an
   // item is tapped, so the default stays hidden on the next load
   setPanel: (v) => set({ showPanel: v }),
+  toggleHistory: () => set((s) => ({ showHistory: !s.showHistory })),
   setName: (n) => set({ name: n }),
 }))

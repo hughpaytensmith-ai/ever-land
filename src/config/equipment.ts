@@ -43,21 +43,6 @@ interface Seed {
 const SEEDS: Seed[] = [
   // ── FRONT BAR ────────────────────────────────────────────────────────────
   {
-    id: 'dj-booth', key: 'dj-booth', label: 'DJ / vinyl booth',
-    product: '2× Technics SL-1200-class decks + battle mixer on isolated plinth',
-    w: 1100, d: 500, h: 1000, x: 2560, y: 50,
-    placement: 'front-top', zone: 'Front · Entertainment', cat: 'entertainment',
-    status: 'confirmed', services: { power: '10A', data: true },
-    notes: 'Isolated plinth, raised deck + splash lip. No compressor/fridge directly under (vibration). Cabling to U/B audio.',
-  },
-  {
-    id: 'garnish-rail', key: 'garnish-rail', label: 'Garnish rail',
-    product: 'Stainless garnish rail',
-    w: 300, d: 100, h: 100, x: 1680, y: 660,
-    placement: 'front-top', zone: 'Front · top', cat: 'fixture',
-    status: 'confirmed', services: {}, fixture: true,
-  },
-  {
     id: 'ice-well', key: 'ice-well', label: 'Ice well (large)',
     product: 'Drop-in ice well',
     w: 1000, d: 400, h: 300, x: 1320, y: 50,
@@ -105,11 +90,18 @@ const SEEDS: Seed[] = [
 
   // ── BACK-OF-BAR ───────────────────────────────────────────────────────────
   {
-    id: 'coffee-fridge', key: 'ub-fridge-2door', label: 'Coffee / milk fridge',
-    product: '2-door under-bench fridge',
-    w: 1340, d: 600, h: 850, x: 0, y: 1500,
+    id: 'coffee-fridge', key: 'ub-fridge-1door', label: 'Coffee / milk fridge',
+    product: '1-door under-bench fridge — solid silver/black front',
+    w: 600, d: 600, h: 850, x: 0, y: 1500,
     placement: 'back-under', zone: 'Back · coffee', cat: 'refrigeration',
     status: 'confirmed', services: { power: '10A' },
+  },
+  {
+    id: 'glass-rack-1', key: 'glass-rack', label: 'Glass rack (under-bench)',
+    product: 'Under-bench clean-glass rack storage',
+    w: 500, d: 500, h: 850, x: 700, y: 1500,
+    placement: 'back-under', zone: 'Back · coffee', cat: 'fixture',
+    status: 'proposed', services: {},
   },
   {
     id: 'espresso', key: 'espresso', label: 'Espresso machine',

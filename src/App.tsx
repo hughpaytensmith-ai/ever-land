@@ -5,13 +5,14 @@ import View3D from './components/View3D'
 import SidePanel from './components/SidePanel'
 import ReferenceDrawer from './components/ReferenceDrawer'
 import ElevationView from './components/ElevationView'
+import History from './components/History'
 import ErrorBoundary, { ThreeDFallback } from './components/ErrorBoundary'
 import { sync, bootstrap, initPresence, undo, redo, getItemSnapshot, getBarSnapshot, updateItem } from './sync/store'
 import { baseHeight } from './lib/geometry'
 import { useUI } from './lib/ui'
 import type { EquipItem } from './types'
 
-const NAME_KEY = 'fletchers-bar:name'
+const NAME_KEY = 'ever-land:name'
 
 export default function App() {
   const [ready, setReady] = useState(false)
@@ -113,7 +114,7 @@ export default function App() {
   if (!ready) {
     return (
       <div className="flex h-full items-center justify-center bg-paper">
-        <div className="wordmark animate-pulse text-[22px] text-pine">Fletcher's — Bar Builder</div>
+        <div className="wordmark animate-pulse text-[22px] text-pine">Ever Land — Bar Builder</div>
       </div>
     )
   }
@@ -121,6 +122,7 @@ export default function App() {
   return (
     <div className="flex h-full flex-col bg-paper text-ink">
       <Header connected={connected} />
+      <History />
       <div className="relative flex min-h-0 flex-1">
         <ReferenceDrawer />
         <main className="min-w-0 flex-1">
@@ -158,9 +160,9 @@ export default function App() {
             }}
             className="w-[340px] rounded-xl border border-stone/30 bg-paper p-6 shadow-panel"
           >
-            <div className="wordmark text-[22px] text-pine">Fletcher's — Bar Builder</div>
+            <div className="wordmark text-[22px] text-pine">Ever Land — Bar Builder</div>
             <p className="mt-1 text-[12px] text-stone">
-              Shared live layout for the Fletcher's bar. Enter a name so your collaborator can see your cursor.
+              Shared live layout for the Ever Land bar. Enter a name so your collaborators can see your cursor.
             </p>
             <input
               autoFocus

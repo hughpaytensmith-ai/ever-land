@@ -3,7 +3,7 @@ import { IndexeddbPersistence } from 'y-indexeddb'
 import { WebsocketProvider } from 'y-websocket'
 import { Awareness, encodeAwarenessUpdate, applyAwarenessUpdate } from 'y-protocols/awareness'
 import { nanoid } from 'nanoid'
-import { SupabaseProvider, createSupabaseClient } from './supabase'
+import { SupabaseProvider, createSupabaseClient, type SnapshotCheck, type SaveStatus, type EditEntry } from './supabase'
 
 // Pluggable realtime layer. Priority: Supabase Realtime → y-websocket → local.
 
@@ -15,6 +15,11 @@ export interface SyncHandle {
   mode: SyncMode
   room: string
   onStatus: (cb: (connected: boolean) => void) => () => void
+  /** resolves after the first server snapshot load (supabase); used to gate seeding */
+  snapshotChecked: Promise<SnapshotCheck>
+  onSaveStatus: (cb: (s: SaveStatus) => void) => () => void
+  logEdit: (author: string | null, action: string) => void
+  fetchEdits: (limit?: number) => Promise<EditEntry[]>
   destroy: () => void
 }
 
@@ -35,7 +40,7 @@ export function getRoom(): string {
   const params = new URLSearchParams(window.location.search)
   let room = params.get('room')
   if (!room) {
-    room = 'fletchers-' + nanoid(8)
+    room = 'ever-land-' + nanoid(8)
     params.set('room', room)
     const url = `${window.location.pathname}?${params.toString()}${window.location.hash}`
     window.history.replaceState({}, '', url)
@@ -48,7 +53,7 @@ class BroadcastProvider {
   private bc: BroadcastChannel
   private destroyed = false
   constructor(room: string, private doc: Y.Doc, private awareness: Awareness) {
-    this.bc = new BroadcastChannel('fletchers-bar:' + room)
+    this.bc = new BroadcastChannel('ever-land:' + room)
     this.bc.onmessage = this.onMessage
     doc.on('update', this.onDocUpdate)
     awareness.on('update', this.onAwarenessUpdate)
@@ -89,7 +94,7 @@ export function createSync(): SyncHandle {
   const room = getRoom()
   const doc = new Y.Doc()
   const statusCbs = new Set<(c: boolean) => void>()
-  const idb = new IndexeddbPersistence('fletchers-bar:' + room, doc)
+  const idb = new IndexeddbPersistence('ever-land:' + room, doc)
 
   let mode: SyncMode
   let awareness: Awareness
@@ -127,6 +132,18 @@ export function createSync(): SyncHandle {
     onStatus(cb) {
       statusCbs.add(cb)
       return () => statusCbs.delete(cb)
+    },
+    // Supabase mode gets the real snapshot-guard + audit log; other modes get
+    // safe no-ops (local mode persists via IndexedDB, which loads before seeding).
+    snapshotChecked: sb ? sb.snapshotChecked : Promise.resolve({ existed: false, errored: false }),
+    onSaveStatus(cb) {
+      return sb ? sb.onSaveStatus(cb) : () => {}
+    },
+    logEdit(author, action) {
+      sb?.logEdit(author, action)
+    },
+    fetchEdits(limit) {
+      return sb ? sb.fetchEdits(limit) : Promise.resolve([])
     },
     destroy() {
       bc?.destroy()

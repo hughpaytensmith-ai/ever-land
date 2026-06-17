@@ -1,6 +1,7 @@
 import * as Y from 'yjs'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createSync, type SyncHandle } from './doc'
+import type { SaveStatus } from './supabase'
 import type { BarShell, CommentThread, EquipItem, PresenceState } from '../types'
 import { DEFAULT_BAR } from '../config/bar'
 import { buildDefaultItems } from '../config/equipment'
@@ -42,15 +43,18 @@ function yToItem(m: Y.Map<unknown>): EquipItem {
 // correction propagates to the existing shared room).
 export const SEED_VERSION = 6
 
+// Seed ONLY a genuinely empty room — never wipe a populated one. (bootstrap also
+// only calls this when the server snapshot is confirmed absent.) The old
+// version-mismatch reseed did `items.delete(all)` and was the cause of the
+// repeated data loss; layout changes now go via in-place migrations / scripts.
 export function ensureSeeded() {
   const bar = yBar()
   const items = yItems()
-  const current = bar.get('seedVersion') as number | undefined
-  const upToDate = current === SEED_VERSION
-  if (upToDate && items.length > 0) return
+  if (items.length > 0) {
+    if (bar.get('seedVersion') === undefined) bar.set('seedVersion', SEED_VERSION)
+    return
+  }
   sync().doc.transact(() => {
-    // reset to the authoritative layout
-    items.delete(0, items.length)
     Object.entries(DEFAULT_BAR).forEach(([k, v]) => bar.set(k, v))
     bar.set('seeded', true)
     bar.set('seedVersion', SEED_VERSION)
@@ -89,31 +93,33 @@ export function dedupeItems() {
   }
 }
 
-/** Wait for persistence/peers, then seed once if still empty. */
+/** Wait for the server snapshot check, then seed ONLY if the room is confirmed
+ *  empty — so a slow/cold load can never re-seed defaults over a saved room. */
 export function bootstrap(onReady: () => void) {
   const s = sync()
-  const finish = () => {
-    ensureSeeded()
+  const finish = (snapshotExisted: boolean) => {
+    if (!snapshotExisted) ensureSeeded() // seed only a confirmed-empty room
     migrateShell()
     dedupeItems()
-    // create the undo manager now and drop the seed/shell-migration from its
-    // stack, so the first Undo can never wipe the seeded layout
-    undoManager().clear()
-    // run again shortly after, in case a peer seeded concurrently
+    undoManager().clear() // keep the seed/migration out of the undo stack
     setTimeout(dedupeItems, 1800)
     onReady()
   }
-  if (s.mode === 'websocket' || s.mode === 'supabase') {
-    // give the socket / Supabase snapshot + peer state a beat to arrive before
-    // we consider seeding, so we never clobber an existing shared room
-    const off = s.onStatus(() => {})
-    setTimeout(() => {
-      off()
-      finish()
-    }, 1000)
+  if (s.mode === 'supabase') {
+    let done = false
+    const go = (existed: boolean) => {
+      if (done) return
+      done = true
+      finish(existed)
+    }
+    // On a load error we pass existed=true so we NEVER seed over a room that's
+    // merely slow/unreachable. Backstop timeout also assumes "exists" (safe).
+    s.snapshotChecked.then(({ existed, errored }) => go(existed || errored))
+    setTimeout(() => go(true), 8000)
+  } else if (s.mode === 'websocket') {
+    setTimeout(() => finish(false), 1000)
   } else {
-    // local: wait a tick for any peer-tab state to arrive, then seed
-    setTimeout(finish, 250)
+    setTimeout(() => finish(false), 250)
   }
 }
 
@@ -170,6 +176,31 @@ export function useComments(itemId?: string): CommentThread[] {
 }
 
 // ── Mutations ────────────────────────────────────────────────────────────────
+// Edit log: who is making changes (set from the name prompt) + a short summary
+// of each committed change, written to the bar_edits audit table.
+let currentAuthor: string | null = null
+function logEdit(action: string) {
+  try {
+    sync().logEdit(currentAuthor, action)
+  } catch {
+    /* logging is best-effort, never blocks an edit */
+  }
+}
+function describePatch(patch: Partial<EquipItem>): string {
+  const k = Object.keys(patch)
+  if (k.includes('x') || k.includes('y')) return 'moved'
+  if (k.includes('label')) return 'renamed'
+  if (k.includes('placement')) return 're-homed'
+  if (k.includes('w') || k.includes('d') || k.includes('h')) return 'resized'
+  if (k.includes('z')) return 'set the height of'
+  if (k.includes('rot')) return 'rotated'
+  if (k.includes('hidden')) return patch.hidden ? 'hid' : 'showed'
+  if (k.includes('archived')) return patch.archived ? 'archived' : 'restored'
+  if (k.includes('status')) return 'set the status of'
+  if (k.includes('price')) return 'priced'
+  return 'edited'
+}
+
 function findItem(id: string): Y.Map<unknown> | null {
   const arr = yItems()
   for (let i = 0; i < arr.length; i++) {
@@ -182,9 +213,11 @@ function findItem(id: string): Y.Map<unknown> | null {
 export function updateItem(id: string, patch: Partial<EquipItem>) {
   const m = findItem(id)
   if (!m) return
+  const label = (m.get('label') as string) || 'item'
   sync().doc.transact(() => {
     Object.entries(patch).forEach(([k, v]) => m.set(k, v as unknown))
   })
+  logEdit(`${describePatch(patch)} ${label}`)
 }
 
 /** Current value of an item (non-reactive) — for the keyboard nudge handler. */
@@ -195,13 +228,16 @@ export function getItemSnapshot(id: string): EquipItem | null {
 
 export function addItem(item: EquipItem) {
   yItems().push([itemToY(item)])
+  logEdit(`added ${item.label}`)
 }
 
 export function removeItem(id: string) {
   const arr = yItems()
   for (let i = 0; i < arr.length; i++) {
     if (arr.get(i).get('id') === id) {
+      const label = (arr.get(i).get('label') as string) || 'item'
       arr.delete(i, 1)
+      logEdit(`removed ${label}`)
       return
     }
   }
@@ -212,6 +248,7 @@ export function updateBar(patch: Partial<BarShell>) {
   sync().doc.transact(() => {
     Object.entries(patch).forEach(([k, v]) => m.set(k, v))
   })
+  logEdit('adjusted the bar shell')
 }
 
 /** Current bar shell (non-reactive) — for the keyboard nudge handler. */
@@ -307,10 +344,21 @@ export function useVersionNames(): string[] {
 // ── Presence / awareness ─────────────────────────────────────────────────────
 let _presenceInit = false
 export function initPresence(name: string) {
+  currentAuthor = name // attribute edits to this person in the audit log
   const a = sync().awareness
   const color = PRESENCE_COLORS[a.clientID % PRESENCE_COLORS.length]
   a.setLocalState({ name, color, cursor: null } satisfies PresenceState)
   _presenceInit = true
+}
+
+// ── Save status + audit feed (for the Header indicator + History panel) ──────
+export function useSaveStatus(): SaveStatus {
+  const [s, setS] = useState<SaveStatus>('idle')
+  useEffect(() => sync().onSaveStatus(setS), [])
+  return s
+}
+export function fetchEdits(limit?: number) {
+  return sync().fetchEdits(limit)
 }
 
 export function setCursor(x: number | null, y: number | null) {
