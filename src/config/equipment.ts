@@ -169,6 +169,23 @@ const SEEDS: Seed[] = [
     placement: 'back-wall', zone: 'Back wall', cat: 'fixture', status: 'confirmed', services: {}, fixture: true,
   },
   {
+    // Stemware hung from the underside of shelf 1 (lowest, z1200), filling its
+    // length in two runs that step around the draught font tower (x2120–2720).
+    // Glasses drop ~280mm: top flush to the shelf underside at 1200 → base 920.
+    id: 'wine-glass-racks-w', key: 'wine-glass-rack', label: 'Under-shelf wine glass racks (west run)',
+    product: 'Avanti stemmed glass rack — triple-row 280mm, ganged ×10 under shelf 1 (~90 stems)',
+    w: 2970, d: 120, h: 280, x: -880, y: 1980, z: 920,
+    placement: 'back-wall', zone: 'Back wall', cat: 'fixture', status: 'proposed', services: {}, fixture: true,
+    notes: 'Hanging stemware filling the underside of the lowest back shelf, west of the draught font. Price = 10 × ~$25 est — confirm unit price + count on Kitchen Warehouse (Avanti triple-row 28cm).',
+  },
+  {
+    id: 'wine-glass-racks-e', key: 'wine-glass-rack', label: 'Under-shelf wine glass racks (east run)',
+    product: 'Avanti stemmed glass rack — triple-row 280mm, ganged ×3 under shelf 1 (~27 stems)',
+    w: 980, d: 120, h: 280, x: 2750, y: 1980, z: 920,
+    placement: 'back-wall', zone: 'Back wall', cat: 'fixture', status: 'proposed', services: {}, fixture: true,
+    notes: 'Hanging stemware filling the underside of the lowest back shelf, east of the draught font. Price = 3 × ~$25 est — confirm on Kitchen Warehouse (Avanti triple-row 28cm).',
+  },
+  {
     id: 'glasswasher', key: 'glasswasher', label: 'Glasswasher',
     product: 'Winterhalter UC-M Excellence-i — polish-free, integrated RO',
     w: 600, d: 600, h: 820, x: 2740, y: 1500,
