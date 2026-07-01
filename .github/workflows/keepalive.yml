@@ -1,0 +1,56 @@
+name: Supabase keep-alive
+
+# Pings the Ever Land Supabase DB so the free-tier project never auto-pauses
+# (free projects pause after ~7 idle days). Runs daily + can be run manually.
+
+on:
+  schedule:
+    - cron: '37 6 * * *'   # daily 06:37 UTC — off the hour to avoid skipped runs
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST (real query → keeps Postgres active)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/bar_rooms?select=id&limit=1")
+          echo "Supabase REST → HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::Supabase ping failed (HTTP $code). Project may be paused — restore it in the Supabase dashboard."
+            exit 1
+          fi
+          echo "✅ DB is awake."
+
+      - name: Checkout (for the anti-idle heartbeat)
+        uses: actions/checkout@v4
+
+      - name: Heartbeat commit only if repo has been quiet >50 days
+        run: |
+          # GitHub auto-disables scheduled workflows after 60 days with no repo
+          # activity. Commit a stamp only when needed, so this survives long idle
+          # periods without spamming history.
+          last=$(git log -1 --format=%ct 2>/dev/null || echo 0)
+          now=$(date +%s)
+          age=$(( (now - last) / 86400 ))
+          echo "Newest commit is ${age} days old."
+          if [ "$age" -gt 50 ]; then
+            git config user.name "ever-land-keepalive[bot]"
+            git config user.email "actions@github.com"
+            date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/keepalive-stamp.txt
+            git add .github/keepalive-stamp.txt
+            git commit -m "chore: keepalive heartbeat [skip ci]"
+            git push
+            echo "Heartbeat commit pushed."
+          else
+            echo "Repo recently active — no heartbeat needed."
+          fi
