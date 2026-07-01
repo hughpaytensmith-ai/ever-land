@@ -1,6 +1,11 @@
 // Domain types for Fletcher's Bar Builder.
 // All linear dimensions are in millimetres (mm), the authoritative unit.
 
+/** Which physical space an item / shell belongs to. The tool toggles between
+ *  these; items default to 'bar' when the field is absent (back-compat with
+ *  rooms created before the kitchen existed). */
+export type Space = 'bar' | 'kitchen'
+
 export type Placement =
   | 'front-top' // on the front-bar top, guest-facing
   | 'front-under' // under-bench, front bar
@@ -23,6 +28,8 @@ export interface Services {
 /** A placed piece of equipment on the shared layout. */
 export interface EquipItem {
   id: string
+  /** which space this item lives in. Absent ⇒ 'bar' (legacy items). */
+  space?: Space
   key: string
   label: string
   product: string
@@ -49,7 +56,8 @@ export interface EquipItem {
   archived?: boolean
 }
 
-/** The adjustable bar shell. Everything editable. */
+/** The adjustable bar/kitchen shell. Everything editable. Both spaces use this
+ *  same galley model (front counter + working aisle + back equipment run). */
 export interface BarShell {
   frontLen: number
   frontDepth: number
@@ -58,6 +66,9 @@ export interface BarShell {
   backLen: number
   backDepth: number
   eastReturn: number
+  /** height of the back bench top (mm). Bar = 1000; kitchen = 900. Used by
+   *  baseHeight() so on-bench kit sits at the right level in 3D + elevations. */
+  benchHeight: number
   pxPerMm: number
 }
 
@@ -72,5 +83,7 @@ export interface CommentThread {
 export interface PresenceState {
   name: string
   color: string
-  cursor: { x: number; y: number } | null
+  /** cursor carries the space it was taken in, so a bar cursor isn't drawn on
+   *  the kitchen plan (different coordinate frame). */
+  cursor: { x: number; y: number; space?: Space } | null
 }

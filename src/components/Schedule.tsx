@@ -1,19 +1,15 @@
 import { useItems, updateItem } from '../sync/store'
 import { useUI } from '../lib/ui'
+import { SPACES } from '../config/spaces'
 import { STATUS_COLOR, STATUS_LABEL } from '../config/theme'
 import { itemIndexMap } from '../lib/indexing'
-import type { EquipItem, Placement } from '../types'
-
-const GROUPS: { key: Placement[]; title: string }[] = [
-  { key: ['front-top', 'front-under'], title: 'Front bar' },
-  { key: ['back-bench', 'back-under', 'back-wall'], title: 'Back-of-bar' },
-  { key: ['plant'], title: 'Plant / gas' },
-  { key: ['overhead'], title: 'Overhead' },
-]
+import type { EquipItem } from '../types'
 
 export default function Schedule() {
   const items = useItems()
   const { selectedId, select } = useUI()
+  const space = useUI((s) => s.space)
+  const GROUPS = SPACES[space].scheduleGroups
   const idx = itemIndexMap(items)
   const active = items.filter((i) => !i.archived)
   const archived = items.filter((i) => i.archived)

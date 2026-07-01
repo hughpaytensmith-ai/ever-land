@@ -18,7 +18,7 @@ const PLACEMENTS: { value: Placement; label: string }[] = [
 ]
 
 function benchHeight(item: EquipItem, bar: BarShell): number {
-  return item.placement.startsWith('front') ? bar.frontHeight : 1000
+  return item.placement.startsWith('front') ? bar.frontHeight : bar.benchHeight
 }
 
 function yForPlacement(p: Placement, cur: EquipItem, bar: BarShell): { x: number; y: number } {

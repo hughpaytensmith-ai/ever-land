@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useItems, useBar, usePresence, useVersionNames, saveVersion, restoreVersion, undo, redo, useUndoState, useSaveStatus } from '../sync/store'
 import { sync } from '../sync/store'
 import { useUI, type ViewMode } from '../lib/ui'
+import { SPACES } from '../config/spaces'
+import type { Space } from '../types'
 import { toCSV, downloadText, downloadDataUrl, buildSchedulePdf } from '../lib/export'
 import { planSnapshot, threeSnapshot } from '../lib/snapshot'
 
@@ -12,7 +14,7 @@ export default function Header({ connected }: { connected: boolean }) {
   const versions = useVersionNames()
   const { canUndo, canRedo } = useUndoState()
   const saveStatus = useSaveStatus()
-  const { view, setView, showOverhead, toggleOverhead, showReference, toggleReference, flipX, toggleFlip, showPanel, togglePanel, toggleHistory, name } = useUI()
+  const { space, setSpace, view, setView, showOverhead, toggleOverhead, showReference, toggleReference, flipX, toggleFlip, showPanel, togglePanel, toggleHistory, name } = useUI()
   const [copied, setCopied] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const mode = sync().mode
@@ -34,7 +36,22 @@ export default function Header({ connected }: { connected: boolean }) {
     <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-stone/30 bg-paper px-4 py-2.5">
       <div className="flex items-baseline gap-2">
         <span className="wordmark text-[20px] font-semibold text-pine">Ever Land</span>
-        <span className="text-[12px] text-stone">— Bar Builder</span>
+        <span className="text-[12px] text-stone">— {SPACES[space].label} Builder</span>
+      </div>
+
+      {/* space toggle — Bar ⇄ Kitchen */}
+      <div className="flex rounded-md border border-pine/40 bg-white p-0.5" title="Switch space">
+        {(['bar', 'kitchen'] as Space[]).map((s) => (
+          <button
+            key={s}
+            onClick={() => setSpace(s)}
+            className={`rounded px-2.5 py-1 text-[12px] font-semibold ${
+              space === s ? 'bg-pine text-white' : 'text-pine/70 hover:bg-pine/5'
+            }`}
+          >
+            {SPACES[s].label}
+          </button>
+        ))}
       </div>
 
       {/* view toggle */}
@@ -52,14 +69,16 @@ export default function Header({ connected }: { connected: boolean }) {
         ))}
       </div>
 
-      <button
-        onClick={toggleOverhead}
-        className={`rounded-md border px-2.5 py-1 text-[12px] ${
-          showOverhead ? 'border-ochre bg-ochre/10 text-walnut' : 'border-stone/30 text-stone'
-        }`}
-      >
-        Overhead joinery
-      </button>
+      {SPACES[space].hasOverhead && (
+        <button
+          onClick={toggleOverhead}
+          className={`rounded-md border px-2.5 py-1 text-[12px] ${
+            showOverhead ? 'border-ochre bg-ochre/10 text-walnut' : 'border-stone/30 text-stone'
+          }`}
+        >
+          Overhead joinery
+        </button>
+      )}
       <button
         onClick={toggleReference}
         className={`rounded-md border px-2.5 py-1 text-[12px] ${

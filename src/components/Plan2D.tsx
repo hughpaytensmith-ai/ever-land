@@ -3,7 +3,8 @@ import { Stage, Layer, Rect, Text, Group, Line, Circle, Label, Tag } from 'react
 import type Konva from 'konva'
 import { useItems, useBar, updateItem, setCursor, usePresence } from '../sync/store'
 import { useUI } from '../lib/ui'
-import { yBands, totalDepth, FRONT_ZONES } from '../config/bar'
+import { yBands, totalDepth } from '../config/bar'
+import { SPACES } from '../config/spaces'
 import { footprint, collisions, isOverhang, snapPlacement, placementForDrop, isLocked } from '../lib/geometry'
 import { PALETTE, STATUS_COLOR } from '../config/theme'
 import { planSnapshot } from '../lib/snapshot'
@@ -20,6 +21,8 @@ export default function Plan2D() {
   const { selectedId, select } = useUI()
   const showOverhead = useUI((s) => s.showOverhead)
   const flipX = useUI((s) => s.flipX)
+  const space = useUI((s) => s.space)
+  const sp = SPACES[space]
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -36,8 +39,10 @@ export default function Plan2D() {
   // westmost point maps to 0 (equipment x-data is untouched).
   const westExt = Math.max(bar.backLen - bar.frontLen, bar.eastReturn, 0)
   const ox = westExt
-  const worldWmm = bar.frontLen + westExt
-  const worldHmm = totalDepth(bar)
+  // extra rooms (kitchen STORE + WC) sit east of the run — expand the envelope
+  const roomsEast = sp.rooms?.length ? Math.max(...sp.rooms.map((r) => r.x + r.w)) : 0
+  const worldWmm = Math.max(bar.frontLen + westExt, roomsEast + ox)
+  const worldHmm = sp.freeform ? (sp.roomH ?? totalDepth(bar)) : totalDepth(bar)
 
   // fit-to-view scale (px per mm), then user zoom on top
   const fitScale = Math.min((size.w - 80) / worldWmm, (size.h - 80) / worldHmm)
@@ -62,10 +67,11 @@ export default function Plan2D() {
   ) => {
     const yData = localY / scale
     // re-home placement to the band being dragged into, and snap against THAT
-    // band's edges/neighbours (so a cross-aisle drag isn't pulled back)
-    const placement = placementForDrop(yData, footprint(item).d, item.placement, bar)
+    // band's edges/neighbours (so a cross-aisle drag isn't pulled back). Freeform
+    // (kitchen) keeps its placement — items move freely on the 2D bench.
+    const placement = sp.freeform ? item.placement : placementForDrop(yData, footprint(item).d, item.placement, bar)
     const target = placement === item.placement ? item : { ...item, placement }
-    const s = snapPlacement({ x: snap(toDataX(localX)), y: snap(yData) }, target, items, bar)
+    const s = snapPlacement({ x: snap(toDataX(localX)), y: snap(yData) }, target, items, bar, sp.zoneLines)
     return { sx: dataXToNode(s.x, fpw), sy: s.y * scale, dataX: s.x, dataY: s.y, snappedX: s.snappedX, snappedY: s.snappedY, placement }
   }
 
@@ -98,7 +104,7 @@ export default function Plan2D() {
     warnedIds.add(c.bId)
   })
   items.forEach((i) => {
-    if (isOverhang(i, bar)) warnedIds.add(i.id)
+    if (!sp.freeform && isOverhang(i, bar)) warnedIds.add(i.id)
   })
 
   const toMm = () => {
@@ -117,7 +123,16 @@ export default function Plan2D() {
   }
 
   const idx = itemIndexMap(items)
-  const visible = items.filter((i) => !i.hidden && !i.archived && (i.placement !== 'overhead' || showOverhead))
+  // Draw order = z-order in Konva (first painted = bottom). The full-width
+  // overhead soffit and big built-in fixtures (back shelves, glass racks, speed
+  // rail) must sit BEHIND the draggable equipment — otherwise they blanket the
+  // front bar on top and steal every click/drag, so the kit underneath can't be
+  // selected or dragged (snap never even fires). Equipment is painted last so it
+  // stays grabbable and its number badge isn't buried under a fixture's.
+  const drawRank = (i: EquipItem) => (i.placement === 'overhead' ? 0 : i.fixture ? 1 : 2)
+  const visible = items
+    .filter((i) => !i.hidden && !i.archived && (i.placement !== 'overhead' || showOverhead))
+    .sort((a, b) => drawRank(a) - drawRank(b))
 
   // Never mount a Konva Stage at 0×0 — drawing a zero-size canvas throws in
   // Konva's async draw loop (uncatchable by React) and would blank the app.
@@ -150,52 +165,71 @@ export default function Plan2D() {
         }}
       >
         <Layer>
-          {/* ── BAR STRUCTURE (floor plan, SP185 A.07 — dish-drop/return WEST) ── */}
-          {/* return / gas strip (west in data; flips with the toggle) */}
-          <Rect x={rx(-westExt, westExt)} y={mm(0)} width={mm(westExt)} height={mm(worldHmm)} fill="#E8E5DC" stroke={PALETTE.stone} strokeWidth={0.4} />
-          <Text x={rx(-westExt, westExt) + 6} y={mm(6)} text="RETURN · gas" fontSize={9} fill={PALETTE.stone} />
-
-          {/* standing side-bar along the north edge */}
-          <Rect x={rx(bar.frontLen - bar.backLen, bar.backLen)} y={mm(bands.backEnd)} width={mm(bar.backLen)} height={mm(110)} fill="#F0EDE4" stroke={PALETTE.stone} strokeWidth={0.4} />
-          <Text x={rx(bar.frontLen - bar.backLen, bar.backLen) + 6} y={mm(bands.backEnd) + 2} text="STANDING SIDE-BAR" fontSize={9} fill={PALETTE.stone} />
-
-          {/* back-of-bar counter (extends to the dish drop) */}
-          <Rect x={rx(bar.frontLen - bar.backLen, bar.backLen)} y={mm(bands.backStart)} width={mm(bar.backLen)} height={mm(bar.backDepth)} fill="#ECEAE3" stroke={PALETTE.ink} strokeWidth={1.3} />
-          <Text x={rx(bar.frontLen - bar.backLen, bar.backLen) + 6} y={mm(bands.backStart) + 4} text="BACK-OF-BAR · engine wall" fontSize={10} fill={PALETTE.stone} />
-
-          {/* dish drop at the kitchen end */}
-          <Rect x={rx(bar.frontLen - bar.backLen, 360)} y={mm(bands.backStart) - mm(360)} width={mm(360)} height={mm(360)} fill="#E2DED3" stroke={PALETTE.ink} strokeWidth={0.9} cornerRadius={mm(60)} />
-          <Text x={rx(bar.frontLen - bar.backLen, 360) + 6} y={mm(bands.backStart) - mm(340)} text="DISH DROP" fontSize={9} fill={PALETTE.stone} />
-
-          {/* staff aisle */}
-          <Rect x={rx(0, bar.frontLen)} y={mm(bands.aisleStart)} width={mm(bar.frontLen)} height={mm(bar.aisle)} fill="#F5F3ED" stroke={PALETTE.ink} strokeWidth={0.4} />
-
-          {/* front bar counter (1100H) */}
-          <Rect x={rx(0, bar.frontLen)} y={mm(bands.frontStart)} width={mm(bar.frontLen)} height={mm(bar.frontDepth)} fill="#ECEAE3" stroke={PALETTE.ink} strokeWidth={1.3} />
-          <Text x={rx(0, bar.frontLen) + 6} y={mm(bands.frontStart) + 4} text="FRONT BAR · 1100H" fontSize={10} fill={PALETTE.stone} />
-          {/* 900 datum on the front bar (the guest-facing low counter line) */}
-          <Line
-            points={[rx(0, bar.frontLen), mm(bands.frontEnd) - 1, rx(0, bar.frontLen) + mm(bar.frontLen), mm(bands.frontEnd) - 1]}
-            stroke={PALETTE.ochre}
-            strokeWidth={1}
-            dash={[5, 4]}
-            listening={false}
-          />
-          <Text x={rx(0, bar.frontLen) + 6} y={mm(bands.frontEnd) - 13} text="900 datum" fontSize={9} fill={PALETTE.ochre} listening={false} />
-
-          {/* front zone dividers + per-zone dims */}
-          {FRONT_ZONES.map((z) => (
-            <Group key={z.label} listening={false}>
-              <Line points={[px(z.x1), mm(bands.frontStart), px(z.x1), mm(bands.frontEnd)]} stroke={PALETTE.stone} dash={[4, 4]} strokeWidth={1} />
-              <Text x={rx(z.x0, z.x1 - z.x0) + 4} y={mm(bands.frontEnd) - 14} width={mm(z.x1 - z.x0) - 8} text={`${z.label} ${z.x1 - z.x0}`} fontSize={9} fill={PALETTE.stone} />
-            </Group>
-          ))}
-
-          {/* dimension lines (in the aisle band) */}
-          <HDim px={px} x0={0} x1={bar.frontLen} yPx={mm(bands.frontEnd) + 16} label={`FRONT ${bar.frontLen.toLocaleString()}`} ticks={[1130, 3430]} />
-          <HDim px={px} x0={bar.frontLen - bar.backLen} x1={bar.frontLen} yPx={mm(bands.backStart) - 14} label={`BACK ${bar.backLen.toLocaleString()}`} />
-          <Line points={[px(bar.frontLen) + 12, mm(bands.aisleStart), px(bar.frontLen) + 12, mm(bands.aisleEnd)]} stroke={PALETTE.stone} strokeWidth={0.75} />
-          <Text x={px(bar.frontLen) + 16} y={mm(bands.aisleStart) + mm(bar.aisle) / 2 - 6} text={`aisle ${bar.aisle}`} fontSize={9} fill={PALETTE.stone} />
+          {/* ── SPACE STRUCTURE ── */}
+          {sp.freeform ? (
+            /* FREEFORM (kitchen): room outline + U-shaped bench + rooms + food-out */
+            <>
+              {/* kitchen room outline */}
+              <Rect x={rx(0, sp.roomW ?? bar.frontLen)} y={mm(0)} width={mm(sp.roomW ?? bar.frontLen)} height={mm(sp.roomH ?? worldHmm)} fill="#FBFAF6" stroke={PALETTE.ink} strokeWidth={1.3} />
+              <Text x={rx(0, sp.roomW ?? bar.frontLen) + 8} y={mm(8)} text={sp.planBackLabel} fontSize={10} fill={PALETTE.stone} listening={false} />
+              {/* U-shaped bench worktop (the legs) */}
+              {sp.bench?.map((b, i) => (
+                <Rect key={i} x={rx(b.x, b.w)} y={mm(b.y)} width={mm(b.w)} height={mm(b.h)} fill="#ECEAE3" stroke={PALETTE.ink} strokeWidth={1} />
+              ))}
+              {/* FOOD OUT opening marker (south side of the U) */}
+              {sp.passLabel && (
+                <Text x={rx(0, 2200) + 10} y={mm(40)} text={sp.passLabel} fontSize={11} fill={PALETTE.pine} listening={false} />
+              )}
+              {/* adjacent rooms: STORE + WC */}
+              {sp.rooms?.map((r) => (
+                <Group key={r.label} listening={false}>
+                  <Rect x={rx(r.x, r.w)} y={mm(r.y)} width={mm(r.w)} height={mm(r.h)} fill="#F2F0E9" stroke={PALETTE.ink} strokeWidth={1} dash={[6, 4]} />
+                  <Text x={rx(r.x, r.w) + 8} y={mm(r.y) + 12} text={r.label} fontSize={11} fill={PALETTE.stone} />
+                </Group>
+              ))}
+              {/* room dimension below */}
+              <HDim px={px} x0={0} x1={sp.roomW ?? bar.frontLen} yPx={mm(sp.roomH ?? worldHmm) + 16} label={`KITCHEN ${(sp.roomW ?? bar.frontLen).toLocaleString()} × ${(sp.roomH ?? worldHmm).toLocaleString()}`} />
+            </>
+          ) : (
+            /* GALLEY (bar): front/aisle/back bands + ornaments */
+            <>
+              {sp.barOrnaments && (
+                <>
+                  <Rect x={rx(-westExt, westExt)} y={mm(0)} width={mm(westExt)} height={mm(worldHmm)} fill="#E8E5DC" stroke={PALETTE.stone} strokeWidth={0.4} />
+                  <Text x={rx(-westExt, westExt) + 6} y={mm(6)} text="RETURN · gas" fontSize={9} fill={PALETTE.stone} />
+                  <Rect x={rx(bar.frontLen - bar.backLen, bar.backLen)} y={mm(bands.backEnd)} width={mm(bar.backLen)} height={mm(110)} fill="#F0EDE4" stroke={PALETTE.stone} strokeWidth={0.4} />
+                  <Text x={rx(bar.frontLen - bar.backLen, bar.backLen) + 6} y={mm(bands.backEnd) + 2} text="STANDING SIDE-BAR" fontSize={9} fill={PALETTE.stone} />
+                </>
+              )}
+              <Rect x={rx(bar.frontLen - bar.backLen, bar.backLen)} y={mm(bands.backStart)} width={mm(bar.backLen)} height={mm(bar.backDepth)} fill="#ECEAE3" stroke={PALETTE.ink} strokeWidth={1.3} />
+              <Text x={rx(bar.frontLen - bar.backLen, bar.backLen) + 6} y={mm(bands.backStart) + 4} text={sp.planBackLabel} fontSize={10} fill={PALETTE.stone} />
+              {sp.barOrnaments && (
+                <>
+                  <Rect x={rx(bar.frontLen - bar.backLen, 360)} y={mm(bands.backStart) - mm(360)} width={mm(360)} height={mm(360)} fill="#E2DED3" stroke={PALETTE.ink} strokeWidth={0.9} cornerRadius={mm(60)} />
+                  <Text x={rx(bar.frontLen - bar.backLen, 360) + 6} y={mm(bands.backStart) - mm(340)} text="DISH DROP" fontSize={9} fill={PALETTE.stone} />
+                </>
+              )}
+              <Rect x={rx(0, bar.frontLen)} y={mm(bands.aisleStart)} width={mm(bar.frontLen)} height={mm(bar.aisle)} fill="#F5F3ED" stroke={PALETTE.ink} strokeWidth={0.4} />
+              <Rect x={rx(0, bar.frontLen)} y={mm(bands.frontStart)} width={mm(bar.frontLen)} height={mm(bar.frontDepth)} fill="#ECEAE3" stroke={PALETTE.ink} strokeWidth={1.3} />
+              <Text x={rx(0, bar.frontLen) + 6} y={mm(bands.frontStart) + 4} text={sp.planFrontLabel} fontSize={10} fill={PALETTE.stone} />
+              {sp.barOrnaments && (
+                <>
+                  <Line points={[rx(0, bar.frontLen), mm(bands.frontEnd) - 1, rx(0, bar.frontLen) + mm(bar.frontLen), mm(bands.frontEnd) - 1]} stroke={PALETTE.ochre} strokeWidth={1} dash={[5, 4]} listening={false} />
+                  <Text x={rx(0, bar.frontLen) + 6} y={mm(bands.frontEnd) - 13} text="900 datum" fontSize={9} fill={PALETTE.ochre} listening={false} />
+                </>
+              )}
+              {sp.zones.map((z) => (
+                <Group key={z.label} listening={false}>
+                  <Line points={[px(z.x1), mm(bands.frontStart), px(z.x1), mm(bands.frontEnd)]} stroke={PALETTE.stone} dash={[4, 4]} strokeWidth={1} />
+                  <Text x={rx(z.x0, z.x1 - z.x0) + 4} y={mm(bands.frontEnd) - 14} width={mm(z.x1 - z.x0) - 8} text={`${z.label} ${z.x1 - z.x0}`} fontSize={9} fill={PALETTE.stone} />
+                </Group>
+              ))}
+              <HDim px={px} x0={0} x1={bar.frontLen} yPx={mm(bands.frontEnd) + 16} label={`FRONT ${bar.frontLen.toLocaleString()}`} ticks={sp.zoneLines} />
+              <HDim px={px} x0={bar.frontLen - bar.backLen} x1={bar.frontLen} yPx={mm(bands.backStart) - 14} label={`BACK ${bar.backLen.toLocaleString()}`} />
+              <Line points={[px(bar.frontLen) + 12, mm(bands.aisleStart), px(bar.frontLen) + 12, mm(bands.aisleEnd)]} stroke={PALETTE.stone} strokeWidth={0.75} />
+              <Text x={px(bar.frontLen) + 16} y={mm(bands.aisleStart) + mm(bar.aisle) / 2 - 6} text={`aisle ${bar.aisle}`} fontSize={9} fill={PALETTE.stone} />
+            </>
+          )}
 
           {/* equipment */}
           {visible.map((it) => {
@@ -256,7 +290,7 @@ export default function Plan2D() {
 
           {/* other users' cursors */}
           {presence.map((p) =>
-            p.state.cursor ? (
+            p.state.cursor && (p.state.cursor.space ?? 'bar') === space ? (
               <Group key={p.id} x={X(p.state.cursor.x)} y={mm(p.state.cursor.y)} listening={false}>
                 <Circle radius={5} fill={p.state.color} />
                 <Label x={8} y={-6}>

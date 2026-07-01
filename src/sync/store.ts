@@ -4,8 +4,10 @@ import { createSync, type SyncHandle } from './doc'
 import type { SaveStatus } from './supabase'
 import type { BarShell, CommentThread, EquipItem, PresenceState } from '../types'
 import { DEFAULT_BAR } from '../config/bar'
-import { buildDefaultItems } from '../config/equipment'
+import { DEFAULT_KITCHEN } from '../config/spaces'
+import { buildDefaultItems, buildKitchenItems } from '../config/equipment'
 import { PRESENCE_COLORS } from '../config/theme'
+import { useUI } from '../lib/ui'
 
 // ── Singleton sync handle ──────────────────────────────────────────────────
 let _sync: SyncHandle | null = null
@@ -19,6 +21,16 @@ function yItems(): Y.Array<Y.Map<unknown>> {
 }
 function yBar(): Y.Map<unknown> {
   return sync().doc.getMap('bar')
+}
+function yKitchen(): Y.Map<unknown> {
+  return sync().doc.getMap('kitchen')
+}
+/** the shell map for a given space (default: the active space) */
+function shellMap(space = useUI.getState().space): Y.Map<unknown> {
+  return space === 'kitchen' ? yKitchen() : yBar()
+}
+function shellDefault(space = useUI.getState().space): BarShell {
+  return space === 'kitchen' ? DEFAULT_KITCHEN : DEFAULT_BAR
 }
 function yComments(): Y.Array<Y.Map<unknown>> {
   return sync().doc.getArray('comments') as Y.Array<Y.Map<unknown>>
@@ -59,6 +71,65 @@ export function ensureSeeded() {
     bar.set('seeded', true)
     bar.set('seedVersion', SEED_VERSION)
     buildDefaultItems().forEach((it) => items.push([itemToY(it)]))
+    // kitchen shell + kit alongside the bar
+    Object.entries(DEFAULT_KITCHEN).forEach(([k, v]) => yKitchen().set(k, v))
+    buildKitchenItems().forEach((it) => items.push([itemToY(it)]))
+    bar.set('kitchenSeeded', true)
+    bar.set('kitchenVersion', KITCHEN_VERSION)
+  })
+}
+
+// Bump when the authoritative kitchen layout/specs change — existing rooms then
+// re-apply the corrected kitchen in-place (positions, sizes, products, prices)
+// WITHOUT touching the bar layout. v3 = exact SP185 equipment-schedule sizes +
+// correct item types (sandwich PRESS, upright food fridges, induction hub, food
+// prep bench, salamander) in a two-row galley. v4 = single equipment wall to
+// match the CP01 floor plan (one run) + STORE/WC rooms drawn beside it. v5 =
+// freeform U-shaped bench. v6 = corrected to A.07 exactly: ~3,900×2,000 footprint,
+// basins NW + main bench (bins·DW·store·fridge×2) + east alcove (induction·sandwich)
+// + food pass; drops the food-prep bench + salamander (not on A.07), adds U/B store.
+export const KITCHEN_VERSION = 6
+
+// Add/refresh the kitchen (shell + kit) on an existing room in-place. Updates
+// each kitchen item by its stable id (so comments + identity survive) and adds
+// any new ones; bar items are never touched. Gated by `kitchenVersion`.
+export function migrateKitchen() {
+  const bar = yBar()
+  if (bar.get('kitchenVersion') === KITCHEN_VERSION) return
+  const items = yItems()
+  const existing = new Map<string, Y.Map<unknown>>()
+  for (let i = 0; i < items.length; i++) {
+    const m = items.get(i)
+    if (m.get('space') === 'kitchen') existing.set(m.get('id') as string, m)
+  }
+  const desired = buildKitchenItems()
+  const desiredIds = new Set(desired.map((d) => d.id))
+  sync().doc.transact(() => {
+    const kit = yKitchen()
+    Object.entries(DEFAULT_KITCHEN).forEach(([k, v]) => kit.set(k, v)) // (re)apply shell dims
+    // remove ORPHANED seed items (a previous kitchen seed's 'k-…' id that's no
+    // longer in the schedule) — iterate from the end so indices stay valid.
+    // Custom team-added items (non-'k-' ids) are preserved.
+    for (let i = items.length - 1; i >= 0; i--) {
+      const m = items.get(i)
+      const id = m.get('id') as string
+      if (m.get('space') === 'kitchen' && id?.startsWith('k-') && !desiredIds.has(id)) {
+        items.delete(i, 1)
+        existing.delete(id)
+      }
+    }
+    desired.forEach((d) => {
+      const m = existing.get(d.id)
+      if (m) {
+        Object.entries(d).forEach(([k, v]) => {
+          if (v !== undefined) m.set(k, v)
+        })
+      } else {
+        items.push([itemToY(d)])
+      }
+    })
+    bar.set('kitchenSeeded', true)
+    bar.set('kitchenVersion', KITCHEN_VERSION)
   })
 }
 
@@ -100,6 +171,7 @@ export function bootstrap(onReady: () => void) {
   const finish = (snapshotExisted: boolean) => {
     if (!snapshotExisted) ensureSeeded() // seed only a confirmed-empty room
     migrateShell()
+    migrateKitchen() // add the kitchen to pre-kitchen rooms (in-place, once)
     dedupeItems()
     undoManager().clear() // keep the seed/migration out of the undo stack
     setTimeout(dedupeItems, 1800)
@@ -131,7 +203,7 @@ export function bootstrap(onReady: () => void) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function useY<T>(target: any, read: () => T): T {
   const version = useRef(0)
-  const cache = useRef<{ v: number; val: T } | null>(null)
+  const cache = useRef<{ v: number; val: T; target: unknown } | null>(null)
   const subscribe = useCallback(
     (cb: () => void) => {
       const handler = () => {
@@ -144,24 +216,33 @@ function useY<T>(target: any, read: () => T): T {
     [target],
   )
   const getSnapshot = () => {
-    if (!cache.current || cache.current.v !== version.current) {
-      cache.current = { v: version.current, val: read() }
+    // recompute when the Yjs type changed (version) OR the target itself changed
+    // (e.g. switching from the bar shell map to the kitchen shell map)
+    if (!cache.current || cache.current.v !== version.current || cache.current.target !== target) {
+      cache.current = { v: version.current, val: read(), target }
     }
     return cache.current.val
   }
   return useSyncExternalStore(subscribe, getSnapshot)
 }
 
+// Items + shell are SCOPED to the active space (Bar ⇄ Kitchen). Every component
+// that calls useItems()/useBar() therefore operates on the current space with no
+// further plumbing. Legacy items (no `space`) count as 'bar'.
 export function useItems(): EquipItem[] {
-  return useY(yItems(), () => yItems().map(yToItem))
+  const space = useUI((s) => s.space)
+  const all = useY(yItems(), () => yItems().map(yToItem))
+  return all.filter((i) => (i.space ?? 'bar') === space)
 }
 
 export function useBar(): BarShell {
-  return useY(yBar(), () => {
-    const m = yBar()
-    const out = { ...DEFAULT_BAR }
-    ;(Object.keys(DEFAULT_BAR) as (keyof BarShell)[]).forEach((k) => {
-      const v = m.get(k)
+  const space = useUI((s) => s.space)
+  const map = shellMap(space)
+  const def = shellDefault(space)
+  return useY(map, () => {
+    const out = { ...def }
+    ;(Object.keys(def) as (keyof BarShell)[]).forEach((k) => {
+      const v = map.get(k)
       if (typeof v === 'number') out[k] = v
     })
     return out
@@ -227,8 +308,9 @@ export function getItemSnapshot(id: string): EquipItem | null {
 }
 
 export function addItem(item: EquipItem) {
-  yItems().push([itemToY(item)])
-  logEdit(`added ${item.label}`)
+  const withSpace = { ...item, space: item.space ?? useUI.getState().space }
+  yItems().push([itemToY(withSpace)])
+  logEdit(`added ${withSpace.label}`)
 }
 
 export function removeItem(id: string) {
@@ -244,18 +326,20 @@ export function removeItem(id: string) {
 }
 
 export function updateBar(patch: Partial<BarShell>) {
-  const m = yBar()
+  const space = useUI.getState().space
+  const m = shellMap(space)
   sync().doc.transact(() => {
     Object.entries(patch).forEach(([k, v]) => m.set(k, v))
   })
-  logEdit('adjusted the bar shell')
+  logEdit(`adjusted the ${space} shell`)
 }
 
-/** Current bar shell (non-reactive) — for the keyboard nudge handler. */
+/** Current active-space shell (non-reactive) — for the keyboard nudge handler. */
 export function getBarSnapshot(): BarShell {
-  const m = yBar()
-  const out = { ...DEFAULT_BAR }
-  ;(Object.keys(DEFAULT_BAR) as (keyof BarShell)[]).forEach((k) => {
+  const m = shellMap()
+  const def = shellDefault()
+  const out = { ...def }
+  ;(Object.keys(def) as (keyof BarShell)[]).forEach((k) => {
     const v = m.get(k)
     if (typeof v === 'number') out[k] = v
   })
@@ -270,7 +354,7 @@ export function getBarSnapshot(): BarShell {
 // change. captureTimeout coalesces rapid edits (a drag) into one undo step.
 let _undo: Y.UndoManager | null = null
 export function undoManager(): Y.UndoManager {
-  if (!_undo) _undo = new Y.UndoManager([yItems(), yBar()], { captureTimeout: 350 })
+  if (!_undo) _undo = new Y.UndoManager([yItems(), yBar(), yKitchen()], { captureTimeout: 350 })
   return _undo
 }
 export function undo() {
@@ -366,7 +450,7 @@ export function setCursor(x: number | null, y: number | null) {
   const a = sync().awareness
   const prev = a.getLocalState() as PresenceState | null
   if (!prev) return
-  a.setLocalStateField('cursor', x === null || y === null ? null : { x, y })
+  a.setLocalStateField('cursor', x === null || y === null ? null : { x, y, space: useUI.getState().space })
 }
 
 export function usePresence(): { id: number; state: PresenceState }[] {

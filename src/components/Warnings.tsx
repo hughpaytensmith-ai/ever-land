@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { useItems, useBar } from '../sync/store'
 import { computeWarnings } from '../lib/geometry'
+import { SPACES } from '../config/spaces'
 import { useUI } from '../lib/ui'
 
 export default function Warnings() {
   const items = useItems()
   const bar = useBar()
+  const space = useUI((s) => s.space)
   const select = useUI((s) => s.select)
-  const warnings = computeWarnings(items, bar)
+  const warnings = computeWarnings(items, bar, SPACES[space].freeform)
   // Collapsed by default — these are informational, never blocking, so keep
   // them out of the way until asked for. Preference is remembered.
   const [open, setOpen] = useState(() => {

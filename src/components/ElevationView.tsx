@@ -4,6 +4,7 @@ import type Konva from 'konva'
 import { useItems, useBar, updateItem } from '../sync/store'
 import { useUI } from '../lib/ui'
 import { totalDepth, yBands } from '../config/bar'
+import { SPACES } from '../config/spaces'
 import { footprint, baseHeight, isLocked } from '../lib/geometry'
 import { PALETTE, STATUS_COLOR } from '../config/theme'
 import type { BarShell, EquipItem } from '../types'
@@ -80,7 +81,10 @@ export default function ElevationView({ dir }: { dir: ElevDir }) {
   const bar = useBar()
   const { selectedId, select } = useUI()
   const showOverhead = useUI((s) => s.showOverhead)
+  const space = useUI((s) => s.space)
+  const sp = SPACES[space]
   const cfg = CFG[dir]
+  const labels = sp.elev[dir]
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -118,6 +122,16 @@ export default function ElevationView({ dir }: { dir: ElevDir }) {
 
   const bands = yBands(bar)
   const aisleMid = (bands.aisleStart + bands.aisleEnd) / 2
+  // height datums from the shell (front counter + back bench; bar adds 900). Set
+  // dedups so the kitchen's equal pass/bench heights collapse to one line.
+  const datumColors = [PALETTE.stone, PALETTE.pine, PALETTE.ochre]
+  const datumTag = (z: number) =>
+    z === bar.frontHeight && z === bar.benchHeight
+      ? space === 'bar' ? 'front' : 'pass / bench'
+      : z === bar.frontHeight ? (space === 'bar' ? 'front' : 'pass') : z === bar.benchHeight ? 'bench' : ''
+  const datums = Array.from(new Set([bar.frontHeight, bar.benchHeight, ...(space === 'bar' ? [900] : [])]))
+    .sort((a, b) => b - a)
+    .map((z, i) => ({ z, color: datumColors[i % datumColors.length], label: `${z}${datumTag(z) ? ' ' + datumTag(z) : ''}` }))
   // Which side of the aisle an item physically sits on (by position, so a stale
   // placement label can't strand it on the wrong elevation).
   const sideOf = (i: EquipItem) => (i.y + footprint(i).d / 2 > aisleMid ? 'back' : 'front')
@@ -142,23 +156,30 @@ export default function ElevationView({ dir }: { dir: ElevDir }) {
             {/* depth-section bands (end elevations) */}
             {cfg.axis === 'y' && (
               <>
-                <SectionBand x0={screenX(0)} x1={screenX(bar.frontDepth)} y={screenY(1100)} h={1100 * scale} label="front" />
-                <SectionBand x0={screenX(bands.backStart)} x1={screenX(bands.backEnd)} y={screenY(900)} h={900 * scale} label="back" />
+                <SectionBand x0={screenX(0)} x1={screenX(bar.frontDepth)} y={screenY(bar.frontHeight)} h={bar.frontHeight * scale} label="front" />
+                <SectionBand x0={screenX(bands.backStart)} x1={screenX(bands.backEnd)} y={screenY(bar.benchHeight)} h={bar.benchHeight * scale} label="back" />
               </>
             )}
 
             {/* floor */}
             <Line points={[padX, screenY(0), size.w - padX, screenY(0)]} stroke={PALETTE.ink} strokeWidth={2} />
-            {/* height datums (labels staggered so the close lines stay legible) */}
-            <Line points={[padX, screenY(1100), size.w - padX, screenY(1100)]} stroke={PALETTE.stone} strokeWidth={1} dash={[8, 6]} />
-            <Text x={padX + 4} y={screenY(1100) - 14} text="1100 front" fontSize={11} fill={PALETTE.stone} />
-            <Line points={[padX, screenY(1000), size.w - padX, screenY(1000)]} stroke={PALETTE.pine} strokeWidth={1} dash={[8, 6]} />
-            <Text x={padX + 96} y={screenY(1000) - 14} text="1000 back bench" fontSize={11} fill={PALETTE.pine} />
-            <Line points={[padX, screenY(900), size.w - padX, screenY(900)]} stroke={PALETTE.ochre} strokeWidth={1} dash={[8, 6]} />
-            <Text x={padX + 232} y={screenY(900) - 14} text="900" fontSize={11} fill={PALETTE.ochre} />
+            {/* height datums from the shell (labels staggered so close lines stay legible) */}
+            {datums.map((d, i) => (
+              <Group key={d.z} listening={false}>
+                <Line points={[padX, screenY(d.z), size.w - padX, screenY(d.z)]} stroke={d.color} strokeWidth={1} dash={[8, 6]} />
+                <Text x={padX + 4 + i * 110} y={screenY(d.z) - 14} text={d.label} fontSize={11} fill={d.color} />
+              </Group>
+            ))}
 
             {/* dimension chain (run length + zone ticks) below the floor */}
-            <ElevDim screenX={screenX} origin={origin} runLen={runLen} ticks={cfg.dimTicks(bar)} label={cfg.dimLabel(bar)} y={screenY(0) + 24} />
+            <ElevDim
+              screenX={screenX}
+              origin={origin}
+              runLen={runLen}
+              ticks={cfg.axis === 'x' ? sp.zoneLines : [bar.frontDepth, bar.frontDepth + bar.aisle]}
+              label={cfg.dimLabel(bar)}
+              y={screenY(0) + 24}
+            />
 
             {shown.map((i) => {
               const onFace = onFaceOf(i)
@@ -231,8 +252,8 @@ export default function ElevationView({ dir }: { dir: ElevDir }) {
       )}
 
       <div className="pointer-events-none absolute left-3 top-2 text-[12px]">
-        <span className="wordmark text-ink">{cfg.title}</span>{' '}
-        <span className="text-stone">— {cfg.sub}</span>
+        <span className="wordmark text-ink">{labels.title}</span>{' '}
+        <span className="text-stone">— {labels.sub}</span>
       </div>
       <div className="pointer-events-none absolute right-3 top-2 rounded bg-ink/80 px-2 py-1 text-[11px] text-paper">
         {readout ?? 'drag to reposition along the wall · click to select'}

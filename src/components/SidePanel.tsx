@@ -6,8 +6,9 @@ import Schedule from './Schedule'
 import ShellEditor from './ShellEditor'
 import { useItems, addItem } from '../sync/store'
 import { useUI } from '../lib/ui'
-import { EQUIPMENT_LIBRARY } from '../config/equipment'
+import { equipmentLibrary } from '../config/equipment'
 import { CATEGORY_COLOR } from '../config/equipment'
+import { SPACES } from '../config/spaces'
 import type { EquipItem } from '../types'
 
 type Tab = 'schedule' | 'shell'
@@ -16,6 +17,8 @@ export default function SidePanel() {
   const items = useItems()
   const { selectedId, select } = useUI()
   const togglePanel = useUI((s) => s.togglePanel)
+  const space = useUI((s) => s.space)
+  const library = equipmentLibrary(space)
   const [tab, setTab] = useState<Tab>('schedule')
   const selected = items.find((i) => i.id === selectedId) ?? null
 
@@ -29,7 +32,7 @@ export default function SidePanel() {
       }
       addItem(item); select(item.id); return
     }
-    const t = EQUIPMENT_LIBRARY.find((l) => l.key === key)
+    const t = library.find((l) => l.key === key)
     if (!t) return
     const item: EquipItem = {
       id: nanoid(8), key: t.key, label: t.label, product: t.label,
@@ -60,7 +63,7 @@ export default function SidePanel() {
           {(['schedule', 'shell'] as Tab[]).map((t) => (
             <button key={t} onClick={() => setTab(t)}
               className={`flex-1 rounded px-2 py-1 text-[12px] font-medium ${tab === t ? 'bg-pine text-white' : 'text-ink/70 hover:bg-paper'}`}>
-              {t === 'schedule' ? 'Equipment schedule' : 'Bar shell'}
+              {t === 'schedule' ? 'Equipment schedule' : SPACES[space].shellLabel}
             </button>
           ))}
         </div>
@@ -74,7 +77,7 @@ export default function SidePanel() {
                 className="mt-0.5 w-full rounded border border-stone/30 bg-white px-2 py-1.5 text-[12px]">
                 <option value="">+ add a piece…</option>
                 <option value="__blank">＋ Blank item (name it yourself)</option>
-                {EQUIPMENT_LIBRARY.map((l) => (
+                {library.map((l) => (
                   <option key={l.key} value={l.key}>{l.label}</option>
                 ))}
               </select>

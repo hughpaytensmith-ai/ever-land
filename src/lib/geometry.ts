@@ -23,9 +23,9 @@ export function baseHeight(item: EquipItem, bar: BarShell): number {
     case 'front-top':
       return bar.frontHeight
     case 'back-bench':
-      return 1000 // back bench can be 1000 (clearance for the keg fridge)
+      return bar.benchHeight // bar 1000 (keg-fridge clearance) · kitchen 900
     case 'back-wall':
-      return 1000
+      return bar.benchHeight
     case 'overhead':
       return 2400 - item.h
     default:
@@ -110,6 +110,7 @@ export function snapPlacement(
   item: EquipItem,
   others: EquipItem[],
   bar: BarShell,
+  zoneLines: number[] = [],
 ): { x: number; y: number; snappedX: boolean; snappedY: boolean } {
   const fp = footprint({ ...item, x: proposed.x, y: proposed.y })
   let x = proposed.x
@@ -125,9 +126,10 @@ export function snapPlacement(
     r.x, // bar run start (west edge)
     r.x + r.w - fp.w, // flush to bar run end (east edge)
   ]
-  // front-bar zone boundaries (Entertainment | Bar | Drinks pass)
+  // front-run zone boundaries (bar: Entertainment | Bar | Drinks pass). Empty
+  // for the kitchen, which has no front-run zoning.
   if (item.placement === 'front-top' || item.placement === 'front-under') {
-    leftTargets.push(1130, 1130 - fp.w, 3430, 3430 - fp.w)
+    for (const zl of zoneLines) leftTargets.push(zl, zl - fp.w)
   }
   for (const o of neighbours) {
     const of = footprint(o)
@@ -192,10 +194,24 @@ export interface Warning {
   itemIds?: string[]
 }
 
-/** All warnings are INFORMATIONAL / SOFT — never blocking (§4, §7). */
-export function computeWarnings(allItems: EquipItem[], bar: BarShell): Warning[] {
+/** All warnings are INFORMATIONAL / SOFT — never blocking (§4, §7). The galley
+ *  over-pack + overhang checks assume the front/aisle/back band model, so they
+ *  are skipped for freeform spaces (the kitchen U-bench). */
+export function computeWarnings(allItems: EquipItem[], bar: BarShell, freeform = false): Warning[] {
   const out: Warning[] = []
   const items = allItems.filter((i) => !i.hidden && !i.archived)
+
+  // collisions apply everywhere
+  if (freeform) {
+    const cols = collisions(items)
+    if (cols.length) {
+      const byId = new Map(items.map((i) => [i.id, i.label]))
+      cols.forEach((c) =>
+        out.push({ level: 'soft', msg: `Overlap: ${byId.get(c.aId)} ↔ ${byId.get(c.bId)}.`, itemIds: [c.aId, c.bId] }),
+      )
+    }
+    return out
+  }
 
   // aisle
   if (bar.aisle < 800) {

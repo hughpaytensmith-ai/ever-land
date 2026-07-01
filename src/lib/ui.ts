@@ -1,9 +1,11 @@
 import { create } from 'zustand'
+import type { Space } from '../types'
 
 export type ViewMode = '2d' | '3d' | 'north' | 'south' | 'east' | 'west'
 
 interface UIState {
   selectedId: string | null
+  space: Space
   view: ViewMode
   showOverhead: boolean
   showReference: boolean
@@ -12,6 +14,7 @@ interface UIState {
   showHistory: boolean
   name: string | null
   select: (id: string | null) => void
+  setSpace: (s: Space) => void
   setView: (v: ViewMode) => void
   toggleOverhead: () => void
   toggleReference: () => void
@@ -47,6 +50,7 @@ const initPanel = (() => {
 
 export const useUI = create<UIState>((set) => ({
   selectedId: null,
+  space: 'bar',
   view: '2d',
   showOverhead: true,
   showReference: false,
@@ -55,6 +59,8 @@ export const useUI = create<UIState>((set) => ({
   showHistory: false,
   name: null,
   select: (id) => set({ selectedId: id }),
+  // switching space clears the selection (ids don't cross spaces in the panel)
+  setSpace: (s) => set({ space: s, selectedId: null }),
   setView: (v) => set({ view: v }),
   toggleOverhead: () => set((s) => ({ showOverhead: !s.showOverhead })),
   toggleReference: () => set((s) => ({ showReference: !s.showReference })),

@@ -17,6 +17,7 @@ export const DEFAULT_BAR: BarShell = {
   backLen: 4610,
   backDepth: 600,
   eastReturn: 900, // east return to the kitchen wall (dish drop)
+  benchHeight: 1000, // back bench top (clearance for the keg fridge)
   pxPerMm: 0.2, // 1px = 5mm (configurable)
 }
 

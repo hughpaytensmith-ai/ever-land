@@ -1,4 +1,4 @@
-import type { EquipItem, Placement, Services, Status } from '../types'
+import type { EquipItem, Placement, Services, Space, Status } from '../types'
 
 // ──────────────────────────────────────────────────────────────────────────
 // DEFAULT LAYOUT = Hugh's saved arrangement (positions preserved), updated per
@@ -15,6 +15,8 @@ export const CATEGORY_COLOR = {
   ice: '#8FB0A6',
   draught: '#B58A6A',
   wash: '#9A968C',
+  cook: '#B5703F', // kitchen — heat (induction)
+  prep: '#8A9B6E', // kitchen — prep (slicer, sandwich)
   fixture: '#CFC9BB',
 } as const
 type Category = keyof typeof CATEGORY_COLOR
@@ -38,6 +40,7 @@ interface Seed {
   services?: Services
   notes?: string
   fixture?: boolean
+  price?: number
 }
 
 const SEEDS: Seed[] = [
@@ -237,9 +240,102 @@ const SEEDS: Seed[] = [
   },
 ]
 
-export function buildDefaultItems(): EquipItem[] {
-  return SEEDS.map((s) => ({
+// ──────────────────────────────────────────────────────────────────────────
+// KITCHEN — laid out EXACTLY to A.07 (SP185 DD01, the build target). Footprint
+// ≈ 3,900 × 2,000. Frame: x 0 (west / dish drop) → 3,900 (east); y 0 (south /
+// FOOD PASS) → 2,000 (north / back wall). A.07 arrangement:
+//   • BASINS (NW, against back wall): hand basin behind, wash basin in front —
+//     the 700-wide × 870-deep unit.
+//   • MAIN BENCH (runs east, against the back wall): U/B bins · U/B dishwasher ·
+//     U/B store · FRIDGE ×2.
+//   • EAST ALCOVE: induction (the 350 hob) + sandwich press.
+//   • FOOD PASS (south): meat slicer on it; dish drop at the west.
+// A.07 does NOT show a food-prep bench or salamander (those are only on the
+// equipment schedule) — omitted here to match A.07. Fridges drawn under-bench
+// per A.07 (the schedule's 1,850 uprights are noted as an alternative).
+// ──────────────────────────────────────────────────────────────────────────
+const A07 = 'Per Studio Plenty A.07 (DD01) — drag to refine.'
+const KITCHEN_SEEDS: Seed[] = [
+  // ── BASINS (NW, against the back wall) ───────────────────────────────────
+  {
+    id: 'k-hand-basin', key: 'hand-basin', label: 'Hand basin',
+    product: 'Stainless hand-wash basin (per A.07)', price: 250,
+    w: 400, d: 400, h: 250, x: 150, y: 40,
+    placement: 'back-bench', zone: 'Kitchen · basins', cat: 'wash', status: 'proposed',
+    services: { water: true, drain: true }, notes: `Hand basin, behind the wash basin (A.07 700×870 unit). ${A07}`,
+  },
+  {
+    id: 'k-wash-basin', key: 'wash-sink', label: 'Wash basin',
+    product: 'Single-bowl stainless wash basin, 304 SS (fits A.07 700-wide unit)', price: 650,
+    w: 600, d: 450, h: 900, x: 60, y: 490,
+    placement: 'back-under', zone: 'Kitchen · basins', cat: 'wash', status: 'proposed',
+    services: { water: true, drain: true }, notes: `Wash basin, in front of the hand basin (A.07). ${A07}`,
+  },
+  // ── MAIN BENCH (back wall, west→east): bins · DW · store · fridge ×2 ─────
+  {
+    id: 'k-ub-bins', key: 'ub-bins', label: 'U/B bins',
+    product: 'Under-bench waste/recycling bins (schedule: 300×400×600)',
+    w: 300, d: 600, h: 600, x: 760, y: 40,
+    placement: 'back-under', zone: 'Kitchen · main bench', cat: 'fixture', status: 'proposed',
+    services: {}, fixture: true, notes: A07,
+  },
+  {
+    id: 'k-dishwasher', key: 'dishwasher', label: 'Dishwasher (U/B)',
+    product: 'Under-bench commercial dishwasher (schedule: 600×600×850). Real: Eswood UC25NDP (~$3,200).', price: 3200,
+    w: 600, d: 600, h: 850, x: 1100, y: 40,
+    placement: 'back-under', zone: 'Kitchen · main bench', cat: 'wash', status: 'proposed',
+    services: { power: '15A', water: true, drain: true }, notes: `"U/B DW" on A.07. ${A07}`,
+  },
+  {
+    id: 'k-ub-store', key: 'ub-store', label: 'U/B store',
+    product: 'Under-bench storage cabinet (joinery)',
+    w: 470, d: 600, h: 820, x: 1740, y: 40,
+    placement: 'back-under', zone: 'Kitchen · main bench', cat: 'fixture', status: 'proposed',
+    services: {}, fixture: true, notes: `"U/B STORE" on A.07. ${A07}`,
+  },
+  {
+    id: 'k-fridge-1', key: 'food-fridge', label: 'Food fridge 1',
+    product: 'Under-bench food fridge, 600 wide (A.07 shows under-bench; schedule alt: 600×600×1850 upright)', price: 2800,
+    w: 600, d: 600, h: 850, x: 2250, y: 40,
+    placement: 'back-under', zone: 'Kitchen · main bench', cat: 'refrigeration', status: 'proposed',
+    services: { power: '10A' }, notes: `One of "FRIDGE X2" on A.07. ${A07}`,
+  },
+  {
+    id: 'k-fridge-2', key: 'food-fridge', label: 'Food fridge 2',
+    product: 'Under-bench food fridge, 600 wide (A.07 shows under-bench; schedule alt: 600×600×1850 upright)', price: 2800,
+    w: 600, d: 600, h: 850, x: 2870, y: 40,
+    placement: 'back-under', zone: 'Kitchen · main bench', cat: 'refrigeration', status: 'proposed',
+    services: { power: '10A' }, notes: `One of "FRIDGE X2" on A.07. ${A07}`,
+  },
+  // ── EAST ALCOVE: induction (350) + sandwich press ───────────────────────
+  {
+    id: 'k-induction', key: 'induction-hub', label: 'Induction hub',
+    product: 'Induction hub (schedule: 290–360×520×60; A.07 hob 350). Real: Roband Dipo / Cooktek class.', price: 1600,
+    w: 350, d: 520, h: 60, x: 3520, y: 560,
+    placement: 'back-bench', zone: 'Kitchen · east alcove', cat: 'cook', status: 'proposed',
+    services: { power: '15A' }, notes: `The "350" hob in the east alcove on A.07. ${A07}`,
+  },
+  {
+    id: 'k-sandwich', key: 'sandwich-press', label: 'Sandwich press',
+    product: 'Commercial sandwich / panini press — bench unit (schedule: 420–500×350×200)', price: 450,
+    w: 460, d: 350, h: 200, x: 3520, y: 40, rot: 90,
+    placement: 'back-bench', zone: 'Kitchen · east alcove', cat: 'prep', status: 'proposed',
+    services: { power: '15A' }, notes: `"SANDWICH" against the back wall, east alcove (A.07). ${A07}`,
+  },
+  // ── FOOD PASS (south): slicer ────────────────────────────────────────────
+  {
+    id: 'k-slicer', key: 'meat-slicer', label: 'Meat slicer',
+    product: 'Bench gravity-feed meat slicer (schedule: 470×430×320). Real: Anvil/Noaw 220mm class.', price: 700,
+    w: 470, d: 430, h: 320, x: 2300, y: 1550,
+    placement: 'back-bench', zone: 'Kitchen · food pass', cat: 'prep', status: 'proposed',
+    services: { power: '10A' }, notes: `On the FOOD PASS, per A.07. ${A07}`,
+  },
+]
+
+function buildFrom(seeds: Seed[], space: Space): EquipItem[] {
+  return seeds.map((s) => ({
     id: s.id,
+    space,
     key: s.key,
     label: s.label,
     product: s.product,
@@ -253,7 +349,7 @@ export function buildDefaultItems(): EquipItem[] {
     placement: s.placement,
     zone: s.zone,
     status: s.status ?? 'proposed',
-    price: null,
+    price: s.price ?? null,
     services: s.services ?? {},
     color: CATEGORY_COLOR[s.cat],
     notes: s.notes,
@@ -261,13 +357,28 @@ export function buildDefaultItems(): EquipItem[] {
   }))
 }
 
-export const EQUIPMENT_LIBRARY = (() => {
+export function buildDefaultItems(): EquipItem[] {
+  return buildFrom(SEEDS, 'bar')
+}
+export function buildKitchenItems(): EquipItem[] {
+  return buildFrom(KITCHEN_SEEDS, 'kitchen')
+}
+
+interface LibItem { key: string; label: string; w: number; d: number; h: number; color: string; placement: Placement }
+function libFrom(seeds: Seed[]): LibItem[] {
   const seen = new Set<string>()
-  const out: { key: string; label: string; w: number; d: number; h: number; color: string; placement: Placement }[] = []
-  for (const s of SEEDS) {
+  const out: LibItem[] = []
+  for (const s of seeds) {
     if (seen.has(s.key)) continue
     seen.add(s.key)
     out.push({ key: s.key, label: s.label, w: s.w, d: s.d, h: s.h, color: CATEGORY_COLOR[s.cat], placement: s.placement })
   }
   return out
-})()
+}
+const BAR_LIBRARY = libFrom(SEEDS)
+const KITCHEN_LIBRARY = libFrom(KITCHEN_SEEDS)
+
+/** Equipment palette for the "add a piece" dropdown, scoped to the active space. */
+export function equipmentLibrary(space: Space): LibItem[] {
+  return space === 'kitchen' ? KITCHEN_LIBRARY : BAR_LIBRARY
+}
